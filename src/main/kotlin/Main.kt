@@ -16,9 +16,11 @@ fun main() {
                 app.printInfo()
             }
             "send" -> {
-                app.send()
-
-                logger.info("Sent!")
+                if (input.size == 2) {
+                    app.send(input[1])
+                } else {
+                    app.send()
+                }
             }
             "stop" -> {
                 app.stop()
