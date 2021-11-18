@@ -1,6 +1,7 @@
 import com.squareup.sqldelight.db.SqlDriver
 import com.squareup.sqldelight.sqlite.driver.JdbcSqliteDriver
 import com.squareup.sqldelight.sqlite.driver.JdbcSqliteDriver.Companion.IN_MEMORY
+import kotlinx.coroutines.Dispatchers
 import mu.KotlinLogging
 import nl.tudelft.ipv8.*
 import nl.tudelft.ipv8.attestation.trustchain.*
@@ -27,6 +28,7 @@ class Application {
     }
 
     private val logger = KotlinLogging.logger {}
+    private val dispatcher = Dispatchers.IO
 
     private val ipv8: IPv8
     private val euroCommunity: EuroCommunity
@@ -44,7 +46,7 @@ class Application {
         ), walkerInterval = 1.0)
 
         ipv8 = IPv8(endpoint, config, myPeer)
-        ipv8.start()
+        ipv8.start(dispatcher)
 
         euroCommunity = ipv8.getOverlay()!!
         trustchainCommunity = ipv8.getOverlay()!!
