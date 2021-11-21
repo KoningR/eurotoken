@@ -1,0 +1,16 @@
+CREATE TABLE IF NOT EXISTS Eurotoken (
+    id BLOB PRIMARY KEY
+);
+
+insert:
+INSERT INTO Eurotoken(id)
+VALUES (?);
+
+getBalance:
+SELECT COUNT(id) FROM Eurotoken;
+
+getEurotoken:
+SELECT id FROM Eurotoken ORDER BY id LIMIT ?;
+
+deleteEurotoken:
+DELETE FROM Eurotoken WHERE id IN (SELECT id FROM Eurotoken ORDER BY id LIMIT ?);

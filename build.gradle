@@ -28,9 +28,12 @@ buildscript {
 }
 
 plugins {
-    id 'org.jetbrains.kotlin.jvm' version '1.4.21'
+    id 'org.jetbrains.kotlin.jvm' version "${kotlin_version}"
     id 'application'
 }
+
+// TODO: Deprecated syntax.
+apply plugin: 'com.squareup.sqldelight'
 
 allprojects {
     repositories {
@@ -80,6 +83,14 @@ compileKotlin {
 
 compileTestKotlin {
     kotlinOptions.jvmTarget = '1.8'
+}
+
+sqldelight {
+    Database {
+        packageName = "nl.tudelft.eurotoken.sqldelight"
+        sourceFolders = ["sqldelight"]
+        schemaOutputDirectory = file("src/main/sqldelight/databases")
+    }
 }
 
 application {

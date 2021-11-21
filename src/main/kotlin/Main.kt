@@ -15,9 +15,21 @@ fun main() {
             "info" -> {
                 app.printInfo()
             }
-            "send" -> {
+            "balance" -> {
+                logger.info("Your balance is ${app.getBalance()} Eurotoken.")
+            }
+            "generate" -> {
                 if (input.size == 2) {
-                    app.send(input[1])
+                    app.generate(input[1].toLong())
+                } else {
+                    app.generate()
+                }
+
+                logger.info("Generated Eurotoken.")
+            }
+            "send" -> {
+                if (input.size == 3) {
+                    app.send(input[1], input[2].toLong())
                 } else {
                     app.send()
                 }
