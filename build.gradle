@@ -30,6 +30,8 @@ buildscript {
 plugins {
     id 'org.jetbrains.kotlin.jvm' version "${kotlin_version}"
     id 'application'
+    id 'com.github.johnrengelman.shadow' version '6.1.0'
+    id 'java'
 }
 
 // TODO: Deprecated syntax.
