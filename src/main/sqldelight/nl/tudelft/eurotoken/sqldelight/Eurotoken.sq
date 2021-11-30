@@ -62,15 +62,10 @@ UPDATE Eurotoken
 SET in_possession = 0
 WHERE eurotoken_id = ?;
 
---insert:
---INSERT INTO Eurotoken(id)
---VALUES (?);
-
---getBalance:
---SELECT COUNT(id) FROM Eurotoken;
-
---getEurotoken:
---SELECT id FROM Eurotoken ORDER BY id LIMIT ?;
-
---deleteEurotoken:
---DELETE FROM Eurotoken WHERE id IN (SELECT id FROM Eurotoken ORDER BY id LIMIT ?);
+getCoinHistory:
+SELECT *
+FROM EuroTransaction
+INNER JOIN TransactionEurotoken
+ON TransactionEurotoken.transaction_id = EuroTransaction.transaction_id
+WHERE TransactionEurotoken.eurotoken_id = ?
+ORDER BY time;

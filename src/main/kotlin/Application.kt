@@ -102,7 +102,7 @@ class Application {
                 euroDatabase.addOwnedCoin(block.transaction[TRANSACTION_TYPE].toString().hexToBytes(), myPublicKey)
 
                 trustchainCommunity.createAgreementBlock(block, mapOf<Any?, Any?>())
-                logger.info("Received a Eurotoken.")
+                logger.info("Received a Eurotoken: " + block.transaction[TRANSACTION_TYPE].toString())
             }
         })
 
@@ -134,7 +134,8 @@ class Application {
             return
         }
 
-        euroDatabase.createCoin(amount, myPublicKey)
+        val coins = euroDatabase.createCoin(amount, myPublicKey)
+        coins.forEach {logger.info("Coin ID: ${it.toHex()}")}
     }
 
     fun sendCoin() {
@@ -170,6 +171,15 @@ class Application {
         logger.info("Sending Eurotoken over Trustchain...")
     }
 
+    fun transactionHistory(eurotokenIdString: String) {
+        // TODO: Improve the protocol to verify history using signatures.
+
+        val eurotokenId = eurotokenIdString.hexToBytes()
+        val history = euroDatabase.getCoinHistory(eurotokenId)
+        for (transaction in history) {
+            logger.info("Transaction[Time: ${transaction.time},\n Recipient: ${transaction.recipient.toHex()},\n id: ${transaction.transaction_id}]")
+        }
+    }
 
     fun stop() {
         ipv8.stop()

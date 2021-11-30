@@ -33,6 +33,13 @@ fun main() {
                 } else {
                     app.sendCoin()
                 }
+
+                logger.info("Your balance is now ${app.getBalance()} Eurotoken.")
+            }
+            "transaction_history" -> {
+                if (input.size == 2) {
+                    app.transactionHistory(input[1])
+                }
             }
             "stop" -> {
                 app.stop()
