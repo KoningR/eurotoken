@@ -4,7 +4,6 @@ import com.squareup.sqldelight.sqlite.driver.JdbcSqliteDriver.Companion.IN_MEMOR
 import kotlinx.coroutines.Dispatchers
 import mu.KotlinLogging
 import nl.tudelft.eurotoken.sqldelight.Database
-import nl.tudelft.eurotoken.sqldelight.EurotokenQueries
 import nl.tudelft.ipv8.*
 import nl.tudelft.ipv8.attestation.trustchain.*
 import nl.tudelft.ipv8.attestation.trustchain.store.TrustChainSQLiteStore
@@ -32,16 +31,18 @@ class Application {
     private val logger = KotlinLogging.logger {}
     private val dispatcher = Dispatchers.IO
 
+    private val myPublicKey: ByteArray
+
     private val ipv8: IPv8
     private val euroCommunity: EuroCommunity
     private val trustchainCommunity: TrustChainCommunity
 
-    private val query: EurotokenQueries
+    private val euroDatabase: EuroDatabaseHelper
 
     init {
         val driver: SqlDriver = JdbcSqliteDriver(IN_MEMORY)
         Database.Schema.create(driver)
-        query = Database(driver).eurotokenQueries
+        euroDatabase = EuroDatabaseHelper(Database(driver).eurotokenQueries)
 
         val myKey = JavaCryptoProvider.generateKey()
         val myPeer = Peer(myKey)
@@ -52,6 +53,8 @@ class Application {
             createTrustChainCommunity(),
             createEuroCommunity()
         ), walkerInterval = 1.0)
+
+        myPublicKey = myPeer.publicKey.keyToBin()
 
         ipv8 = IPv8(endpoint, config, myPeer)
         ipv8.start(dispatcher)
@@ -91,8 +94,12 @@ class Application {
         trustchainCommunity.registerBlockSigner(BLOCK_TYPE, object : BlockSigner {
             override fun onSignatureRequest(block: TrustChainBlock) {
 
+                // TODO: Currently, every received token get its own transaction.
+                //  Perhaps find a way to group multiple received tokens into
+                //  single transactions?
+
                 // Blocks are already validated, so we can directly add them to our database.
-                query.insert(block.transaction[TRANSACTION_TYPE].toString().hexToBytes())
+                euroDatabase.addOwnedCoin(block.transaction[TRANSACTION_TYPE].toString().hexToBytes(), myPublicKey)
 
                 trustchainCommunity.createAgreementBlock(block, mapOf<Any?, Any?>())
                 logger.info("Received a Eurotoken.")
@@ -108,10 +115,6 @@ class Application {
         logger.info("My public key: ${getPublicKeyHex(myPeer)}")
     }
 
-    fun stop() {
-        ipv8.stop()
-    }
-
     fun printInfo() {
         val peers = euroCommunity.getPeers()
         logger.info("EuroCommunity: ${peers.size} peers")
@@ -122,52 +125,25 @@ class Application {
     }
 
     fun getBalance(): Long {
-        return query.getBalance().executeAsOne()
+        return euroDatabase.getBalance()
     }
 
-    fun generate(amount: Long = 1) {
+    fun createCoin(amount: Long = 1) {
         if (amount < 1) {
             logger.info("Please enter a valid amount.")
             return
         }
 
-        repeat(amount.toInt()) {
-            query.insert(EuroGenerator.generateToken())
-        }
+        euroDatabase.createCoin(amount, myPublicKey)
     }
 
-    fun send() {
+    fun sendCoin() {
         for (peer in euroCommunity.getPeers()) {
-            val publicKey = peer.publicKey.keyToBin()
-            sendEuroOverTrustchain(publicKey, 1)
+            sendCoin(getPublicKeyHex(peer), 1)
         }
     }
 
-    fun send(publicKeyString: String, amount: Long) {
-        val publicKey = JavaCryptoProvider.keyFromPublicBin(publicKeyString.hexToBytes()).keyToBin()
-        sendEuroOverTrustchain(publicKey, amount)
-    }
-
-    private fun getAndDeleteEurotoken(amount: Long): List<ByteArray>? {
-       if (amount < 1) {
-           logger.info("Please enter a valid amount, not ${amount}.")
-           return null
-       }
-
-       val eurotokens = query.getEurotoken(amount).executeAsList()
-
-       if (eurotokens.size < amount) {
-           logger.info("You have ${eurotokens.size} Eurotoken, not ${amount}.")
-           return null
-       }
-
-       query.deleteEurotoken(amount)
-
-       return eurotokens
-    }
-
-    private fun sendEuroOverTrustchain(publicKey: ByteArray, amount: Long) {
-
+    fun sendCoin(publicKeyString: String, amount: Long) {
         if (amount < 1) {
             logger.info("Please enter a valid amount, not ${amount}.")
             return
@@ -178,7 +154,11 @@ class Application {
             return
         }
 
-        val eurotokens = getAndDeleteEurotoken(amount)!!
+        val publicKey = JavaCryptoProvider.keyFromPublicBin(publicKeyString.hexToBytes()).keyToBin()
+
+        // TODO: Add a mechanism to mark as sent only when the network has received a token.
+
+        val eurotokens = euroDatabase.getAndMarkAsSent(publicKey, amount)
 
         for (token in eurotokens) {
             val hex = token.toHex()
@@ -190,11 +170,9 @@ class Application {
         logger.info("Sending Eurotoken over Trustchain...")
     }
 
-    /**
-     * Short helper method to return the hex string of a peer's entire public key.
-     */
-    private fun getPublicKeyHex(peer: Peer): String {
-        return peer.publicKey.keyToBin().toHex()
+
+    fun stop() {
+        ipv8.stop()
     }
 
     private fun createDiscoveryCommunity(): OverlayConfiguration<DiscoveryCommunity> {
@@ -227,5 +205,12 @@ class Application {
             Overlay.Factory(EuroCommunity::class.java),
             listOf(randomWalk)
         )
+    }
+
+    /**
+     * Short helper method to return the hex string of a peer's entire public key.
+     */
+    private fun getPublicKeyHex(peer: Peer): String {
+        return peer.publicKey.keyToBin().toHex()
     }
 }

@@ -15,23 +15,23 @@ fun main() {
             "info" -> {
                 app.printInfo()
             }
-            "balance" -> {
+            "get_balance" -> {
                 logger.info("Your balance is ${app.getBalance()} Eurotoken.")
             }
-            "generate" -> {
+            "create_coin" -> {
                 if (input.size == 2) {
-                    app.generate(input[1].toLong())
+                    app.createCoin(input[1].toLong())
                 } else {
-                    app.generate()
+                    app.createCoin()
                 }
 
-                logger.info("Generated Eurotoken.")
+                logger.info("Generated Eurotoken. Your balance is now ${app.getBalance()} Eurotoken.")
             }
-            "send" -> {
+            "send_coin" -> {
                 if (input.size == 3) {
-                    app.send(input[1], input[2].toLong())
+                    app.sendCoin(input[1], input[2].toLong())
                 } else {
-                    app.send()
+                    app.sendCoin()
                 }
             }
             "stop" -> {
