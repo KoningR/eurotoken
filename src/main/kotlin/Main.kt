@@ -24,10 +24,16 @@ fun executeLine(inputString: String, app: Application, logger: KLogger): Boolean
             logger.info("Generated Eurotoken. Your balance is now ${app.getBalance()} Eurotoken.")
         }
         "send_coin" -> {
-            if (input.size == 3) {
-                app.sendCoin(input[1], input[2].toLong())
-            } else {
-                app.sendCoin()
+            when (input.size) {
+                2 -> {
+                    app.sendCoin(input[1].toLong())
+                }
+                3 -> {
+                    app.sendCoin(input[1], input[2].toLong())
+                }
+                else -> {
+                    app.sendCoin()
+                }
             }
 
             logger.info("Your balance is now ${app.getBalance()} Eurotoken.")

@@ -97,12 +97,13 @@ class Application {
                 // TODO: Currently, every received token get its own transaction.
                 //  Perhaps find a way to group multiple received tokens into
                 //  single transactions?
+                trustchainCommunity.createAgreementBlock(block, mapOf<Any?, Any?>())
 
                 // Blocks are already validated, so we can directly add them to our database.
                 euroDatabase.addOwnedCoin(block.transaction[TRANSACTION_TYPE].toString().hexToBytes(), myPublicKey)
 
-                trustchainCommunity.createAgreementBlock(block, mapOf<Any?, Any?>())
                 logger.info("Received a Eurotoken: " + block.transaction[TRANSACTION_TYPE].toString())
+                logger.info("Balance is now: ${euroDatabase.getBalance()}")
             }
         })
 
@@ -138,9 +139,9 @@ class Application {
         coins.forEach {logger.info("Coin ID: ${it.toHex()}")}
     }
 
-    fun sendCoin() {
+    fun sendCoin(amount: Long = 1) {
         for (peer in euroCommunity.getPeers()) {
-            sendCoin(getPublicKeyHex(peer), 1)
+            sendCoin(getPublicKeyHex(peer), amount)
         }
     }
 
