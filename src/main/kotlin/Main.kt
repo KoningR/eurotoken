@@ -4,7 +4,6 @@ import java.io.File
 import java.io.FileNotFoundException
 
 fun executeLine(inputString: String, app: Application, logger: KLogger): Boolean {
-//    val input = readLine()!!.toLowerCase().split(" ")
     val input = inputString.toLowerCase().split(" ")
 
     when (input[0]) {
@@ -63,15 +62,15 @@ fun main(args: Array<String>) {
 
     val app = Application()
 
-    val reader = try {
-        File(args[0]).inputStream().bufferedReader()
+    try {
+        val reader = File(args[0]).inputStream().bufferedReader()
+
+        reader.forEachLine {
+            executeLine(it, app, logger)
+        }
     } catch (e: FileNotFoundException) {
         logger.info("Could not find script file.")
         return
-    }
-
-    reader.forEachLine {
-        executeLine(it, app, logger)
     }
 
     while (true) {

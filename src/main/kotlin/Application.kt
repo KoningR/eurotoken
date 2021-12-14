@@ -35,7 +35,6 @@ class Application {
 
     private val ipv8: IPv8
     private val euroCommunity: EuroCommunity
-    private val trustchainCommunity: TrustChainCommunity
 
     private val euroDatabase: EuroDatabaseHelper
 
@@ -50,7 +49,6 @@ class Application {
         val endpoint = EndpointAggregator(udpEndpoint, null)
         val config = IPv8Configuration(overlays = listOf(
             createDiscoveryCommunity(),
-            createTrustChainCommunity(),
             createEuroCommunity()
         ), walkerInterval = 1.0)
 
@@ -60,9 +58,8 @@ class Application {
         ipv8.start(dispatcher)
 
         euroCommunity = ipv8.getOverlay()!!
-        trustchainCommunity = ipv8.getOverlay()!!
 
-        trustchainCommunity.registerTransactionValidator(BLOCK_TYPE, object : TransactionValidator {
+        euroCommunity.registerTransactionValidator(BLOCK_TYPE, object : TransactionValidator {
             override fun validate(
                 block: TrustChainBlock,
                 database: TrustChainStore
@@ -91,13 +88,13 @@ class Application {
             }
         })
 
-        trustchainCommunity.registerBlockSigner(BLOCK_TYPE, object : BlockSigner {
+        euroCommunity.registerBlockSigner(BLOCK_TYPE, object : BlockSigner {
             override fun onSignatureRequest(block: TrustChainBlock) {
 
                 // TODO: Currently, every received token get its own transaction.
                 //  Perhaps find a way to group multiple received tokens into
                 //  single transactions?
-                trustchainCommunity.createAgreementBlock(block, mapOf<Any?, Any?>())
+                euroCommunity.createAgreementBlock(block, mapOf<Any?, Any?>())
 
                 // Blocks are already validated, so we can directly add them to our database.
                 euroDatabase.addOwnedCoin(block.transaction[TRANSACTION_TYPE].toString().hexToBytes(), myPublicKey)
@@ -107,7 +104,7 @@ class Application {
             }
         })
 
-//        trustchainCommunity.addListener(BLOCK_TYPE, object : BlockListener {
+//        euroCommunity.addListener(BLOCK_TYPE, object : BlockListener {
 //            override fun onBlockReceived(block: TrustChainBlock) {
 //                logger.info("Received a block: ${block.timestamp} ${block.blockId} ${block.transaction}")
 //            }
@@ -166,7 +163,7 @@ class Application {
             val hex = token.toHex()
 
             val transaction = mapOf(TRANSACTION_TYPE to hex)
-            trustchainCommunity.createProposalBlock(BLOCK_TYPE, transaction, publicKey)
+            euroCommunity.createProposalBlock(BLOCK_TYPE, transaction, publicKey)
         }
 
         logger.info("Sending Eurotoken over Trustchain...")
@@ -196,7 +193,7 @@ class Application {
         )
     }
 
-    private fun createTrustChainCommunity(): OverlayConfiguration<TrustChainCommunity> {
+    private fun createEuroCommunity(): OverlayConfiguration<EuroCommunity> {
         val settings = TrustChainSettings()
         val driver: SqlDriver = JdbcSqliteDriver(IN_MEMORY)
         // Eurotoken also has a generated database class.
@@ -205,15 +202,7 @@ class Application {
         val store = TrustChainSQLiteStore(database)
         val randomWalk = RandomWalk.Factory(timeout = 3.0, peers = 20)
         return OverlayConfiguration(
-            TrustChainCommunity.Factory(settings, store),
-            listOf(randomWalk)
-        )
-    }
-
-    private fun createEuroCommunity(): OverlayConfiguration<EuroCommunity> {
-        val randomWalk = RandomWalk.Factory(timeout = 3.0, peers = 20)
-        return OverlayConfiguration(
-            Overlay.Factory(EuroCommunity::class.java),
+            EuroCommunity.Factory(settings, store),
             listOf(randomWalk)
         )
     }
