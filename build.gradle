@@ -100,3 +100,7 @@ sqldelight {
 application {
     mainClassName = 'MainKt'
 }
+
+run {
+    standardInput = System.in
+}
