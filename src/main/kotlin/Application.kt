@@ -1,7 +1,10 @@
 import com.squareup.sqldelight.db.SqlDriver
 import com.squareup.sqldelight.sqlite.driver.JdbcSqliteDriver
 import com.squareup.sqldelight.sqlite.driver.JdbcSqliteDriver.Companion.IN_MEMORY
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import mu.KotlinLogging
 import nl.tudelft.eurotoken.sqldelight.Database
 import nl.tudelft.ipv8.*
@@ -30,6 +33,7 @@ class Application {
 
     private val logger = KotlinLogging.logger {}
     private val dispatcher = Dispatchers.IO
+    private val scope = CoroutineScope(dispatcher)
 
     private val myPublicKey: ByteArray
 
@@ -37,6 +41,9 @@ class Application {
     private val euroCommunity: EuroCommunity
 
     private val euroDatabase: EuroDatabaseHelper
+
+    private var startTime: Long = -1L
+    private val coinTimes: MutableList<Pair<Long, Long>> = mutableListOf()
 
     init {
         val driver: SqlDriver = JdbcSqliteDriver(IN_MEMORY)
@@ -48,7 +55,7 @@ class Application {
         val udpEndpoint = UdpEndpoint(8090, InetAddress.getByName("0.0.0.0"))
         val endpoint = EndpointAggregator(udpEndpoint, null)
         val config = IPv8Configuration(overlays = listOf(
-            createDiscoveryCommunity(),
+//            createDiscoveryCommunity(),
             createEuroCommunity()
         ), walkerInterval = 1.0)
 
@@ -91,6 +98,12 @@ class Application {
         euroCommunity.registerBlockSigner(BLOCK_TYPE, object : BlockSigner {
             override fun onSignatureRequest(block: TrustChainBlock) {
 
+                val currentTime = System.currentTimeMillis()
+
+                if (startTime < 0) {
+                    startTime = currentTime
+                }
+
                 // TODO: Currently, every received token get its own transaction.
                 //  Perhaps find a way to group multiple received tokens into
                 //  single transactions?
@@ -98,6 +111,13 @@ class Application {
 
                 // Blocks are already validated, so we can directly add them to our database.
                 euroDatabase.addOwnedCoin(block.transaction[TRANSACTION_TYPE].toString().hexToBytes(), myPublicKey)
+
+                val balance = getBalance()
+                coinTimes.add(Pair(balance, currentTime - startTime))
+
+                if (balance == 100L) {
+                    logger.warn { coinTimes.joinToString(", ", "[", "]") }
+                }
 
                 logger.info("Received a Eurotoken: " + block.transaction[TRANSACTION_TYPE].toString())
                 logger.info("Balance is now: ${euroDatabase.getBalance()}")
@@ -159,14 +179,18 @@ class Application {
 
         val eurotokens = euroDatabase.getAndMarkAsSent(publicKey, amount)
 
-        for (token in eurotokens) {
-            val hex = token.toHex()
+        scope.launch {
+            for (token in eurotokens) {
+                val hex = token.toHex()
 
-            val transaction = mapOf(TRANSACTION_TYPE to hex)
-            euroCommunity.createProposalBlock(BLOCK_TYPE, transaction, publicKey)
+                val transaction = mapOf(TRANSACTION_TYPE to hex)
+                euroCommunity.createProposalBlock(BLOCK_TYPE, transaction, publicKey)
+
+                delay(20)
+            }
+
+            logger.info("Sending Eurotoken over Trustchain...")
         }
-
-        logger.info("Sending Eurotoken over Trustchain...")
     }
 
     fun transactionHistory(eurotokenIdString: String) {
