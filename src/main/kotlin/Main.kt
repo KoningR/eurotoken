@@ -62,15 +62,16 @@ fun main(args: Array<String>) {
 
     val app = Application()
 
-    try {
-        val reader = File(args[0]).inputStream().bufferedReader()
+    if (args.isNotEmpty()) {
+        try {
+            val reader = File(args[0]).inputStream().bufferedReader()
 
-        reader.forEachLine {
-            executeLine(it, app, logger)
+            reader.forEachLine {
+                executeLine(it, app, logger)
+            }
+        } catch (e: FileNotFoundException) {
+            logger.info("Could not find script file ${args[0]}.")
         }
-    } catch (e: FileNotFoundException) {
-        logger.info("Could not find script file.")
-        return
     }
 
     while (true) {
