@@ -3,7 +3,7 @@ import mu.KotlinLogging
 import java.io.File
 import java.io.FileNotFoundException
 
-fun executeLine(inputString: String, app: Application, logger: KLogger): Boolean {
+private fun executeLine(inputString: String, app: Application, logger: KLogger): Boolean {
     val input = inputString.toLowerCase().split(" ")
 
     when (input[0]) {
@@ -26,9 +26,6 @@ fun executeLine(inputString: String, app: Application, logger: KLogger): Boolean
             when (input.size) {
                 2 -> {
                     app.sendCoin(input[1].toLong())
-                }
-                3 -> {
-                    app.sendCoin(input[1], input[2].toLong())
                 }
                 else -> {
                     app.sendCoin()

@@ -3,33 +3,25 @@ import com.squareup.sqldelight.sqlite.driver.JdbcSqliteDriver
 import com.squareup.sqldelight.sqlite.driver.JdbcSqliteDriver.Companion.IN_MEMORY
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import mu.KotlinLogging
 import nl.tudelft.eurotoken.sqldelight.Database
-import nl.tudelft.ipv8.*
-import nl.tudelft.ipv8.attestation.trustchain.*
+import nl.tudelft.ipv8.IPv8
+import nl.tudelft.ipv8.IPv8Configuration
+import nl.tudelft.ipv8.OverlayConfiguration
+import nl.tudelft.ipv8.Peer
+import nl.tudelft.ipv8.attestation.trustchain.TrustChainSettings
 import nl.tudelft.ipv8.attestation.trustchain.store.TrustChainSQLiteStore
-import nl.tudelft.ipv8.attestation.trustchain.store.TrustChainStore
-import nl.tudelft.ipv8.attestation.trustchain.validation.TransactionValidator
-import nl.tudelft.ipv8.attestation.trustchain.validation.ValidationResult
 import nl.tudelft.ipv8.keyvault.JavaCryptoProvider
 import nl.tudelft.ipv8.messaging.EndpointAggregator
+import nl.tudelft.ipv8.messaging.eva.EVAProtocol
 import nl.tudelft.ipv8.messaging.udp.UdpEndpoint
-import nl.tudelft.ipv8.peerdiscovery.DiscoveryCommunity
-import nl.tudelft.ipv8.peerdiscovery.strategy.PeriodicSimilarity
-import nl.tudelft.ipv8.peerdiscovery.strategy.RandomChurn
 import nl.tudelft.ipv8.peerdiscovery.strategy.RandomWalk
 import nl.tudelft.ipv8.util.hexToBytes
 import nl.tudelft.ipv8.util.toHex
 import java.net.InetAddress
 
 class Application {
-
-    companion object {
-        private const val BLOCK_TYPE = "euro_block"
-        private const val TRANSACTION_TYPE = "euro_token"
-    }
 
     private val logger = KotlinLogging.logger {}
     private val dispatcher = Dispatchers.IO
@@ -55,7 +47,6 @@ class Application {
         val udpEndpoint = UdpEndpoint(8090, InetAddress.getByName("0.0.0.0"))
         val endpoint = EndpointAggregator(udpEndpoint, null)
         val config = IPv8Configuration(overlays = listOf(
-//            createDiscoveryCommunity(),
             createEuroCommunity()
         ), walkerInterval = 1.0)
 
@@ -66,69 +57,35 @@ class Application {
 
         euroCommunity = ipv8.getOverlay()!!
 
-        euroCommunity.registerTransactionValidator(BLOCK_TYPE, object : TransactionValidator {
-            override fun validate(
-                block: TrustChainBlock,
-                database: TrustChainStore
-            ): ValidationResult {
+        euroCommunity.evaProtocol = EVAProtocol(euroCommunity, scope)
 
-                if (block.isAgreement) {
-                    return ValidationResult.Valid
-                }
-
-                if (!block.transaction.containsKey(TRANSACTION_TYPE)) {
-                    return ValidationResult.Invalid(listOf("Block does not contain a token."))
-                }
-
-                val bytes = try {
-                    block.transaction[TRANSACTION_TYPE].toString().hexToBytes()
-                } catch (e: Exception) {
-                    return ValidationResult.Invalid(listOf("Token could not be parsed from hex to byte array."))
-                }
-
-                return if (EuroGenerator.verifyToken(bytes)) {
-                    ValidationResult.Valid
-                } else {
-                    ValidationResult.Invalid(listOf("Signature could not be verified."))
-                }
-
+        euroCommunity.setOnEVAReceiveCompleteCallback(fun (peer: Peer, info: String, id: String, data: ByteArray?) {
+            val currentTime = System.currentTimeMillis()
+            if (startTime < 0) {
+                startTime = currentTime
             }
-        })
 
-        euroCommunity.registerBlockSigner(BLOCK_TYPE, object : BlockSigner {
-            override fun onSignatureRequest(block: TrustChainBlock) {
-
-                val currentTime = System.currentTimeMillis()
-
-                if (startTime < 0) {
-                    startTime = currentTime
-                }
-
-                // TODO: Currently, every received token get its own transaction.
-                //  Perhaps find a way to group multiple received tokens into
-                //  single transactions?
-                euroCommunity.createAgreementBlock(block, mapOf<Any?, Any?>())
-
-                // Blocks are already validated, so we can directly add them to our database.
-                euroDatabase.addOwnedCoin(block.transaction[TRANSACTION_TYPE].toString().hexToBytes(), myPublicKey)
-
-                val balance = getBalance()
-                coinTimes.add(Pair(balance, currentTime - startTime))
-
-                if (balance == 100L) {
-                    logger.warn { coinTimes.joinToString(", ", "[", "]") }
-                }
-
-                logger.info("Received a Eurotoken: " + block.transaction[TRANSACTION_TYPE].toString())
-                logger.info("Balance is now: ${euroDatabase.getBalance()}")
+            if (data == null) {
+                logger.info { "Data was null." }
+                return
             }
-        })
 
-//        euroCommunity.addListener(BLOCK_TYPE, object : BlockListener {
-//            override fun onBlockReceived(block: TrustChainBlock) {
-//                logger.info("Received a block: ${block.timestamp} ${block.blockId} ${block.transaction}")
-//            }
-//        })
+            if (!EuroGenerator.verifyToken(data)) {
+                logger.info { "Token could not be verified!" }
+                return
+            }
+
+            euroDatabase.addOwnedCoin(data, myPublicKey)
+
+            val balance = getBalance()
+            coinTimes.add(Pair(balance, currentTime - startTime))
+            if (balance == 100L) {
+                logger.warn { coinTimes.joinToString(", ", "[", "]") }
+            }
+
+            logger.info{ "Received a Eurotoken!" }
+            logger.info{ "Balance is now: ${euroDatabase.getBalance()}" }
+        })
 
         logger.info("My public key: ${getPublicKeyHex(myPeer)}")
     }
@@ -158,11 +115,11 @@ class Application {
 
     fun sendCoin(amount: Long = 1) {
         for (peer in euroCommunity.getPeers()) {
-            sendCoin(getPublicKeyHex(peer), amount)
+            sendCoin(peer, amount)
         }
     }
 
-    fun sendCoin(publicKeyString: String, amount: Long) {
+    fun sendCoin(peer: Peer, amount: Long) {
         if (amount < 1) {
             logger.info("Please enter a valid amount, not ${amount}.")
             return
@@ -173,7 +130,7 @@ class Application {
             return
         }
 
-        val publicKey = JavaCryptoProvider.keyFromPublicBin(publicKeyString.hexToBytes()).keyToBin()
+        val publicKey = JavaCryptoProvider.keyFromPublicBin(getPublicKeyHex(peer).hexToBytes()).keyToBin()
 
         // TODO: Add a mechanism to mark as sent only when the network has received a token.
 
@@ -181,12 +138,7 @@ class Application {
 
         scope.launch {
             for (token in eurotokens) {
-                val hex = token.toHex()
-
-                val transaction = mapOf(TRANSACTION_TYPE to hex)
-                euroCommunity.createProposalBlock(BLOCK_TYPE, transaction, publicKey)
-
-                delay(20)
+                euroCommunity.evaSendBinary(peer, euroCommunity.serviceId, java.util.UUID.randomUUID().toString(), token)
             }
 
             logger.info("Sending Eurotoken over Trustchain...")
@@ -205,16 +157,6 @@ class Application {
 
     fun stop() {
         ipv8.stop()
-    }
-
-    private fun createDiscoveryCommunity(): OverlayConfiguration<DiscoveryCommunity> {
-        val randomWalk = RandomWalk.Factory(timeout = 3.0, peers = 20)
-        val randomChurn = RandomChurn.Factory()
-        val periodicSimilarity = PeriodicSimilarity.Factory()
-        return OverlayConfiguration(
-            DiscoveryCommunity.Factory(),
-            listOf(randomWalk, randomChurn, periodicSimilarity)
-        )
     }
 
     private fun createEuroCommunity(): OverlayConfiguration<EuroCommunity> {
