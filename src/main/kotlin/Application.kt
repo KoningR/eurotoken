@@ -22,6 +22,7 @@ import nl.tudelft.ipv8.peerdiscovery.strategy.RandomChurn
 import nl.tudelft.ipv8.peerdiscovery.strategy.RandomWalk
 import nl.tudelft.ipv8.util.hexToBytes
 import nl.tudelft.ipv8.util.toHex
+import java.io.File
 import java.lang.IllegalArgumentException
 import java.net.InetAddress
 
@@ -65,12 +66,11 @@ class Application {
         euroCommunity.evaProtocol = EVAProtocol(euroCommunity, scope)
 
         euroCommunity.setOnEVAReceiveCompleteCallback(fun (peer: Peer, info: String, id: String, data: ByteArray?) {
-            val currentTime = System.currentTimeMillis()
             if (startTime < 0) {
-                startTime = currentTime
+                startTime = System.currentTimeMillis()
             }
 
-            logger.info { "Time since start is ${currentTime - startTime}." }
+            logger.info { "Time since start is ${System.currentTimeMillis() - startTime}." }
 
             if (data == null) {
                 logger.info { "Data was null." }
@@ -96,11 +96,17 @@ class Application {
 
                 euroDatabase.addOwnedCoin(token, myPublicKey)
 
+                val currentTime = System.currentTimeMillis()
                 val balance = getBalance()
                 coinTimes.add(Pair(balance, currentTime - startTime))
 
-                if (balance == 500L) {
-                    logger.warn { coinTimes.joinToString(", ", "[", "]") }
+                if (balance == 100L) {
+                    File("timing2.csv").bufferedWriter().use { out ->
+                        out.write("transactions,times\n")
+                        coinTimes.forEach { pair ->
+                            out.write("${pair.first},${pair.second}\n")
+                        }
+                    }
                 }
             }
 
@@ -160,7 +166,7 @@ class Application {
             val firstToken = eurotokens.removeFirst()
             euroCommunity.evaSendBinary(peer, euroCommunity.serviceId, java.util.UUID.randomUUID().toString(), firstToken)
 
-            val batchSize = 500
+            val batchSize = 10000
             val chunks = eurotokens.chunked(batchSize)
 
             for (chunk in chunks) {
