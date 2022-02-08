@@ -51,7 +51,7 @@ class Application {
         val udpEndpoint = UdpEndpoint(8090, InetAddress.getByName("0.0.0.0"))
         val endpoint = EndpointAggregator(udpEndpoint, null)
         val config = IPv8Configuration(overlays = listOf(
-            createDiscoveryCommunity(),
+//            createDiscoveryCommunity(),
             createEuroCommunity()
         ), walkerInterval = 1.0)
 
@@ -153,16 +153,24 @@ class Application {
 
         // TODO: Add a mechanism to mark as sent only when the network has received a token.
 
-        val eurotokens = euroDatabase.getAndMarkAsSent(publicKey, amount)
+        val eurotokens = euroDatabase.getAndMarkAsSent(publicKey, amount).toMutableList()
 
         scope.launch {
-            var massiveBinary = ByteArray(0)
-            (1 until eurotokens.size).forEach {
-                massiveBinary += eurotokens[it]
-            }
+            // Send to start the timer on the receiver's side.
+            val firstToken = eurotokens.removeFirst()
+            euroCommunity.evaSendBinary(peer, euroCommunity.serviceId, java.util.UUID.randomUUID().toString(), firstToken)
 
-            euroCommunity.evaSendBinary(peer, euroCommunity.serviceId, java.util.UUID.randomUUID().toString(), eurotokens[0])
-            euroCommunity.evaSendBinary(peer, euroCommunity.serviceId, java.util.UUID.randomUUID().toString(), massiveBinary)
+            val batchSize = 500
+            val chunks = eurotokens.chunked(batchSize)
+
+            for (chunk in chunks) {
+                var chunkArray = ByteArray(0)
+                (chunk.indices).forEach {
+                    chunkArray += chunk[it]
+                }
+
+                euroCommunity.evaSendBinary(peer, euroCommunity.serviceId, java.util.UUID.randomUUID().toString(), chunkArray)
+            }
         }
 
         logger.info("Sending Eurotoken over Trustchain...")
