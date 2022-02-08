@@ -16,9 +16,13 @@ import nl.tudelft.ipv8.keyvault.JavaCryptoProvider
 import nl.tudelft.ipv8.messaging.EndpointAggregator
 import nl.tudelft.ipv8.messaging.eva.EVAProtocol
 import nl.tudelft.ipv8.messaging.udp.UdpEndpoint
+import nl.tudelft.ipv8.peerdiscovery.DiscoveryCommunity
+import nl.tudelft.ipv8.peerdiscovery.strategy.PeriodicSimilarity
+import nl.tudelft.ipv8.peerdiscovery.strategy.RandomChurn
 import nl.tudelft.ipv8.peerdiscovery.strategy.RandomWalk
 import nl.tudelft.ipv8.util.hexToBytes
 import nl.tudelft.ipv8.util.toHex
+import java.lang.IllegalArgumentException
 import java.net.InetAddress
 
 class Application {
@@ -47,6 +51,7 @@ class Application {
         val udpEndpoint = UdpEndpoint(8090, InetAddress.getByName("0.0.0.0"))
         val endpoint = EndpointAggregator(udpEndpoint, null)
         val config = IPv8Configuration(overlays = listOf(
+            createDiscoveryCommunity(),
             createEuroCommunity()
         ), walkerInterval = 1.0)
 
@@ -65,25 +70,40 @@ class Application {
                 startTime = currentTime
             }
 
+            logger.info { "Time since start is ${currentTime - startTime}." }
+
             if (data == null) {
                 logger.info { "Data was null." }
                 return
             }
 
-            if (!EuroGenerator.verifyToken(data)) {
-                logger.info { "Token could not be verified!" }
-                return
+            val tokenSize = 197
+            (data.indices step tokenSize).forEach {
+                val token = try {
+                    data.copyOfRange(it, it + tokenSize)
+                } catch (e: IndexOutOfBoundsException) {
+                    logger.info { "Index out of range" }
+                    return
+                } catch (e: IllegalArgumentException) {
+                    logger.info { "illegal argument" }
+                    return
+                }
+
+                if (!EuroGenerator.verifyToken(token)) {
+                    logger.info { "Token could not be verified! Token size was ${token.size}" }
+                    return
+                }
+
+                euroDatabase.addOwnedCoin(token, myPublicKey)
+
+                val balance = getBalance()
+                coinTimes.add(Pair(balance, currentTime - startTime))
+
+                if (balance == 500L) {
+                    logger.warn { coinTimes.joinToString(", ", "[", "]") }
+                }
             }
 
-            euroDatabase.addOwnedCoin(data, myPublicKey)
-
-            val balance = getBalance()
-            coinTimes.add(Pair(balance, currentTime - startTime))
-            if (balance == 100L) {
-                logger.warn { coinTimes.joinToString(", ", "[", "]") }
-            }
-
-            logger.info{ "Received a Eurotoken!" }
             logger.info{ "Balance is now: ${euroDatabase.getBalance()}" }
         })
 
@@ -109,8 +129,7 @@ class Application {
             return
         }
 
-        val coins = euroDatabase.createCoin(amount, myPublicKey)
-        coins.forEach {logger.info("Coin ID: ${it.toHex()}")}
+        euroDatabase.createCoin(amount, myPublicKey)
     }
 
     fun sendCoin(amount: Long = 1) {
@@ -137,12 +156,16 @@ class Application {
         val eurotokens = euroDatabase.getAndMarkAsSent(publicKey, amount)
 
         scope.launch {
-            for (token in eurotokens) {
-                euroCommunity.evaSendBinary(peer, euroCommunity.serviceId, java.util.UUID.randomUUID().toString(), token)
+            var massiveBinary = ByteArray(0)
+            (1 until eurotokens.size).forEach {
+                massiveBinary += eurotokens[it]
             }
 
-            logger.info("Sending Eurotoken over Trustchain...")
+            euroCommunity.evaSendBinary(peer, euroCommunity.serviceId, java.util.UUID.randomUUID().toString(), eurotokens[0])
+            euroCommunity.evaSendBinary(peer, euroCommunity.serviceId, java.util.UUID.randomUUID().toString(), massiveBinary)
         }
+
+        logger.info("Sending Eurotoken over Trustchain...")
     }
 
     fun transactionHistory(eurotokenIdString: String) {
@@ -157,6 +180,16 @@ class Application {
 
     fun stop() {
         ipv8.stop()
+    }
+
+    private fun createDiscoveryCommunity(): OverlayConfiguration<DiscoveryCommunity> {
+        val randomWalk = RandomWalk.Factory(timeout = 3.0, peers = 20)
+        val randomChurn = RandomChurn.Factory()
+        val periodicSimilarity = PeriodicSimilarity.Factory()
+        return OverlayConfiguration(
+            DiscoveryCommunity.Factory(),
+            listOf(randomWalk, randomChurn, periodicSimilarity)
+        )
     }
 
     private fun createEuroCommunity(): OverlayConfiguration<EuroCommunity> {
