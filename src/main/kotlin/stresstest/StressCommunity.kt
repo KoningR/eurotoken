@@ -2,6 +2,7 @@ package stresstest
 
 import mu.KotlinLogging
 import nl.tudelft.ipv8.Community
+import nl.tudelft.ipv8.IPv4Address
 import nl.tudelft.ipv8.Overlay
 import nl.tudelft.ipv8.messaging.Packet
 import java.io.File
@@ -11,13 +12,16 @@ class StressCommunity : Community() {
     private val logger = KotlinLogging.logger {}
 
     private val measureWindow = 500
-
     private var startTime = -1L
     private var received = 0
     private val times = Array(measureWindow) { Pair(0, 0L) }
 
     init {
         messageHandlers[MessageId.STRESS_MESSAGE] = ::onStressMessage
+    }
+
+    override fun getWalkableAddresses(): List<IPv4Address> {
+        return emptyList()
     }
 
     private fun onStressMessage(packet: Packet) {
@@ -35,7 +39,7 @@ class StressCommunity : Community() {
             logger.info { "Time since start: ${now - startTime}" }
             logger.info { "Bytes received: ${measureWindow * 1500}" }
 
-            File("timing1.csv").bufferedWriter().use { out ->
+            File("1.csv").bufferedWriter().use { out ->
                 out.write("transactions,times\n")
                 times.forEach { pair ->
                     out.write("${pair.first},${pair.second}\n")

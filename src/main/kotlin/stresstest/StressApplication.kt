@@ -1,6 +1,8 @@
 package stresstest
 
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import mu.KotlinLogging
 import nl.tudelft.ipv8.IPv8
 import nl.tudelft.ipv8.IPv8Configuration
@@ -15,12 +17,12 @@ import java.net.InetAddress
 class StressApplication {
     private val logger = KotlinLogging.logger {}
     private val dispatcher = Dispatchers.IO
+    private val scope = CoroutineScope(dispatcher)
 
     private val udpEndpoint: UdpEndpoint = UdpEndpoint(8090, InetAddress.getByName("0.0.0.0"))
     private val stressCommunity: StressCommunity
 
     init {
-
         val myPrivateKey = JavaCryptoProvider.generateKey()
         val myPeer = Peer(myPrivateKey)
 //        val myPublicKey = myPeer.publicKey.keyToBin()
@@ -46,23 +48,25 @@ class StressApplication {
             return
         }
 
-        val recipient = stressCommunity.getPeers().first()
+        scope.launch {
+            val recipient = stressCommunity.getPeers().first()
+            val address = recipient.address
 
-        repeat(1500) {
-            val payload = StressPayload()
-            val packet = stressCommunity.serializePacket(
-                StressCommunity.MessageId.STRESS_MESSAGE,
-                payload,
-                sign = true,
-                encrypt = true,
-                recipient = recipient
-            )
+            repeat(3000) {
+                val payload = StressPayload()
+                val packet = stressCommunity.serializePacket(
+                    StressCommunity.MessageId.STRESS_MESSAGE,
+                    payload,
+                    sign = true,
+                    encrypt = true,
+                    recipient = recipient
+                )
 
-            // TODO: Test both send() methods.
-            udpEndpoint.send(recipient, packet)
+                udpEndpoint.send(address, packet)
+            }
+
+            logger.info { "Sent packet(s)" }
         }
-
-        logger.info { "Sent packet(s)" }
     }
 
     private fun createStressCommunity(): OverlayConfiguration<StressCommunity> {
