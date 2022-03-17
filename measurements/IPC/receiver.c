@@ -14,6 +14,13 @@ char *fileName = "/tmp/throughputfifo";
 
 struct timespec endTimeStruct;
 
+/*
+ * Calculates megabytes per second, given bytes and milliseconds.
+ */
+double throughputMbPerSecond(ssize_t bytes, double millis) {
+    return ((double) bytes / 1000000) / (millis / 1000);
+}
+
 int main() {
     // Assuming this process is started after the sender process, this thread won't stall
     // because the FIFO is already opened on the other end.
@@ -58,9 +65,8 @@ int main() {
     printf("Read %zi bytes in total\n", readBytes);
     printf("Memory address of received data: %p\n", payload);
     printf("Last byte of received data (should be *): %c\n", payload[DATA_SIZE - 1]);
-    printf("Start time: %f\n", startTime);
-    printf("End time: %f\n", endTime);
     printf("Delta time in milliseconds: %f\n", endTime - startTime);
+    printf("Throughput was %f megabytes per second\n", throughputMbPerSecond(readBytes, endTime - startTime));
     printf("Receiver is done");
 
     return 0;
