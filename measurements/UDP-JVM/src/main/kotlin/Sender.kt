@@ -2,6 +2,7 @@ import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
 
+const val RECEIVER_ADDRESS = "192.168.178.220"
 const val FROM_PORT = 25595
 const val TO_PORT = 25535
 const val PAYLOAD_SIZE = 1472
@@ -20,7 +21,7 @@ fun useSamePacket() {
     data.fill(0x42)
 
     // Bind the port and create the fixed packet.
-    val receiver = InetAddress.getByName("localhost")
+    val receiver = InetAddress.getByName(RECEIVER_ADDRESS)
     val packet = DatagramPacket(data, PAYLOAD_SIZE, receiver, TO_PORT)
     val socket = DatagramSocket(FROM_PORT)
 
@@ -45,7 +46,7 @@ fun createNewPacket() {
     data.fill(0x42)
 
     // Bind the port.
-    val receiver = InetAddress.getByName("localhost")
+    val receiver = InetAddress.getByName(RECEIVER_ADDRESS)
     val socket = DatagramSocket(FROM_PORT)
 
     // Keep sending packets until enough bytes are sent.
