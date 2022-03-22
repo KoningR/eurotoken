@@ -39,7 +39,6 @@ int main() {
     // Create a listening address.
     receiverAddress.sin_family = AF_INET;
     receiverAddress.sin_port = htons(TO_PORT);
-    receiverAddress.sin_addr.s_addr = inet_addr("127.0.0.1");
 
     // Bind the address to the socket.
     if (bind(socketHandle, (struct sockaddr *) &receiverAddress,
