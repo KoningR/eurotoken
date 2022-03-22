@@ -2,6 +2,7 @@ import com.goterl.lazysodium.LazySodiumJava
 import com.goterl.lazysodium.SodiumJava
 import java.lang.Exception
 import kotlin.random.Random
+import kotlinx.coroutines.*
 
 // The total number of bytes to be signed and verified.
 const val DATA_SIZE = 100000000
@@ -69,7 +70,7 @@ fun singlePayload() {
     println("Resulting signature: ${lazySodium.sodiumBin2Hex(signature)}")
 }
 
-fun splitPayload() {
+suspend fun splitPayload() {
     // Array may hold slightly fewer bytes than DATA_SIZE due to floor division.
     val payLoadArray = Array(DATA_SIZE.floorDiv(SPLIT_SIZE)) {
         val payload = ByteArray(SPLIT_SIZE)
@@ -96,13 +97,15 @@ fun splitPayload() {
         ByteArray(SIGNATURE_SIZE)
     }
 
-    val arrayTime = System.currentTimeMillis()
-
-    // Sign each part of the payload.
-    repeat(payLoadArray.size) {
-        if (!lazySodium.cryptoSignDetached(signatureArray[it], payLoadArray[it],
-                    SPLIT_SIZE.toLong(), signKey)) {
-            throw Exception("Could not sign payload")
+    withContext(Dispatchers.Default) {
+        // Sign each part of the payload.
+        repeat(payLoadArray.size) {
+            launch {
+                if (!lazySodium.cryptoSignDetached(signatureArray[it], payLoadArray[it],
+                            SPLIT_SIZE.toLong(), signKey)) {
+                    throw Exception("Could not sign payload")
+                }
+            }
         }
     }
 
@@ -112,11 +115,15 @@ fun splitPayload() {
     // Start timing the verification process.
     val startVerifyTime = System.currentTimeMillis()
 
-    // Verify each part of the payload.
-    repeat(signatureArray.size) {
-        if (!lazySodium.cryptoSignVerifyDetached(signatureArray[it], payLoadArray[it],
-                SPLIT_SIZE, verifyKey)) {
-            throw Exception("Could not verify payload")
+    withContext(Dispatchers.Default) {
+        // Verify each part of the payload.
+        repeat(signatureArray.size) {
+            launch {
+                if (!lazySodium.cryptoSignVerifyDetached(signatureArray[it], payLoadArray[it],
+                        SPLIT_SIZE, verifyKey)) {
+                    throw Exception("Could not verify payload")
+                }
+            }
         }
     }
 
@@ -136,5 +143,8 @@ fun splitPayload() {
 
 fun main() {
     singlePayload()
-    splitPayload()
+
+    runBlocking {
+        splitPayload()
+    }
 }
