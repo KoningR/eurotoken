@@ -33,7 +33,7 @@ class StressApplication {
         ), walkerInterval = 1.0)
 
         val ipv8 = IPv8(endpointAggregator, config, myPeer)
-        ipv8.start(dispatcher)
+        ipv8.start()
 
         stressCommunity = ipv8.getOverlay()!!
     }

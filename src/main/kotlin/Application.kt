@@ -59,7 +59,7 @@ class Application {
         myPublicKey = myPeer.publicKey.keyToBin()
 
         ipv8 = IPv8(endpoint, config, myPeer)
-        ipv8.start(dispatcher)
+        ipv8.start()
 
         euroCommunity = ipv8.getOverlay()!!
 

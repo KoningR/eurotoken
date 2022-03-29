@@ -34,7 +34,7 @@ class EvaApplication {
         ), walkerInterval = 1.0)
 
         val ipv8 = IPv8(endpointAggregator, config, myPeer)
-        ipv8.start(dispatcher)
+        ipv8.start()
 
         evaCommunity = ipv8.getOverlay()!!
         evaCommunity.evaProtocol = EVAProtocol(evaCommunity, scope)
