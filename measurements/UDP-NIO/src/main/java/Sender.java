@@ -80,6 +80,12 @@ public class Sender {
                 // position after each send.
                 buffer.position(0);
             } catch (IOException e) {
+                // When a PortUnreachableException is thrown but the receiver
+                // process still prints correct output, this error can be ignored.
+                // The reason is because this process sends more data than the
+                // receiver is willing to receive (to account for potential packet
+                // loss) thus the receiver stops its receiving channel.
+
                 e.printStackTrace();
                 return;
             }
