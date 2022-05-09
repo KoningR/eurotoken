@@ -1,4 +1,4 @@
-package stresstest
+package old.stresstest
 
 import mu.KotlinLogging
 import nl.tudelft.ipv8.Community

@@ -1,3 +1,5 @@
+package old.token
+
 import nl.tudelft.eurotoken.sqldelight.EurotokenQueries
 import nl.tudelft.eurotoken.sqldelight.GetCoinHistory
 import java.lang.Exception

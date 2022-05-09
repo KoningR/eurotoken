@@ -1,3 +1,5 @@
+package old.token
+
 import com.squareup.sqldelight.db.SqlDriver
 import com.squareup.sqldelight.sqlite.driver.JdbcSqliteDriver
 import com.squareup.sqldelight.sqlite.driver.JdbcSqliteDriver.Companion.IN_MEMORY
@@ -118,7 +120,7 @@ class Application {
 
     fun printInfo() {
         val peers = euroCommunity.getPeers()
-        logger.info("EuroCommunity: ${peers.size} peers")
+        logger.info("old.token.EuroCommunity: ${peers.size} peers")
 
         for (peer in peers) {
             logger.info(getPublicKeyHex(peer))
