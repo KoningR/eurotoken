@@ -1,4 +1,4 @@
-package old.stresstest
+package measurements
 
 import nl.tudelft.ipv8.messaging.Serializable
 import nl.tudelft.ipv8.messaging.udp.UdpEndpoint
@@ -12,7 +12,7 @@ class StressPayload : Serializable {
     companion object TestPacket {
         // The UDP_PAYLOAD_LIMIT does not correspond to the maximal payload allowed by ipv8,
         // due to possible encryption and signing.
-        private val TEST_PAYLOAD = ByteArray(UdpEndpoint.UDP_PAYLOAD_LIMIT - 219)
+        internal val TEST_PAYLOAD = ByteArray(1200)
 
         init {
             TEST_PAYLOAD.fill(42)
