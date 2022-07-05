@@ -14,6 +14,7 @@ import nl.tudelft.ipv8.messaging.eva.TransferProgress
 import nl.tudelft.ipv8.messaging.udp.UdpEndpoint
 import nl.tudelft.ipv8.peerdiscovery.strategy.RandomWalk
 import java.net.InetAddress
+import kotlin.math.floor
 
 class EvaApplication {
     private val logger = KotlinLogging.logger {}
@@ -37,7 +38,7 @@ class EvaApplication {
         ipv8.start()
 
         evaCommunity = ipv8.getOverlay()!!
-        evaCommunity.evaProtocol = EVAProtocol(evaCommunity, scope)
+        evaCommunity.evaProtocol = EVAProtocol(evaCommunity, scope, retransmitInterval = 150L)
         evaCommunity.setOnEVAReceiveProgressCallback(::onEvaProgress)
         evaCommunity.setOnEVAReceiveCompleteCallback(::onEvaComplete)
     }
@@ -52,38 +53,25 @@ class EvaApplication {
             return
         }
 
-        val testPayload = ByteArray(2000 * 1472)
+        val testPayload = ByteArray(10000000)
         testPayload.fill(42)
 
         val recipient = evaCommunity.getPeers().first()
         // Both community and id are necessary.
         evaCommunity.evaSendBinary(recipient, evaCommunity.serviceId, java.util.UUID.randomUUID().toString(), testPayload)
 
-        logger.info { "Sent packet(s)" }
-
-//        scope.launch {
-//            val recipient = evaCommunity.getPeers().first()
-//            val address = recipient.address
-//
-//            repeat(3000) {
-//                val payload = EvaPayload()
-//                val packet = evaCommunity.serializePacket(
-//                    EvaCommunity.MessageId.STRESS_MESSAGE,
-//                    payload,
-//                    sign = true,
-//                    encrypt = true,
-//                    recipient = recipient
-//                )
-//
-//                udpEndpoint.send(recipient, packet)
-//            }
-//
-//            logger.info { "Sent packet(s)" }
-//        }
+        logger.info { "Sent packets!" }
     }
 
     private fun onEvaProgress(peer: Peer, info: String, progress: TransferProgress) {
-        evaCommunity.startTimer()
+        if (progress.progress == 0.0) {
+            evaCommunity.startTimer()
+        }
+
+        if ((floor(progress.progress) % 10).toInt() == 0) {
+            logger.info { "Progress: ${progress.progress}" }
+        }
+
     }
 
     private fun onEvaComplete(peer: Peer, info: String, id: String, data: ByteArray?) {
