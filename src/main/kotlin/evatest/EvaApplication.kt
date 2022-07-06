@@ -68,10 +68,6 @@ class EvaApplication {
             evaCommunity.startTimer()
         }
 
-        if ((floor(progress.progress) % 10).toInt() == 0) {
-            logger.info { "Progress: ${progress.progress}" }
-        }
-
     }
 
     private fun onEvaComplete(peer: Peer, info: String, id: String, data: ByteArray?) {
