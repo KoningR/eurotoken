@@ -1,4 +1,4 @@
-package stresstest
+package old.stresstest
 
 import nl.tudelft.ipv8.messaging.Serializable
 import nl.tudelft.ipv8.messaging.udp.UdpEndpoint

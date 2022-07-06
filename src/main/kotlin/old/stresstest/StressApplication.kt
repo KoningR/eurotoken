@@ -1,4 +1,4 @@
-package stresstest
+package old.stresstest
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

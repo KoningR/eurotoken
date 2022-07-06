@@ -1,3 +1,5 @@
+package old.token
+
 import nl.tudelft.ipv8.keyvault.JavaCryptoProvider
 import nl.tudelft.ipv8.keyvault.PrivateKey
 import nl.tudelft.ipv8.keyvault.PublicKey
