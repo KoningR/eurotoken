@@ -22,8 +22,10 @@ open class EuroCommunity : Community() {
     internal val myPublicKey: ByteArray by lazy { myPeer.publicKey.keyToBin() }
 
     override fun getWalkableAddresses(): List<IPv4Address> {
-        TODO("Fill in your own list of local IP addresses.")
-//        return emptyList()
+        return listOf(
+            IPv4Address("127.0.0.1", 8090),
+            IPv4Address("127.0.0.1", 8091)
+        )
     }
 
     internal fun getFirstPeer(): Peer? {
