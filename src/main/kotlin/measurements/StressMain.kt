@@ -1,4 +1,4 @@
-package old.stresstest
+package measurements
 
 import mu.KLogger
 import mu.KotlinLogging

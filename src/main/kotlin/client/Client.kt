@@ -60,7 +60,8 @@ private fun executeLine(inputString: String): Boolean {
             clientCommunity.info()
         }
         "send" -> {
-            clientCommunity.sendToPeer(clientCommunity.getFirstPeer()!!,2)
+            clientCommunity.sendToPeer(clientCommunity.getFirstPeer()!!,
+                if (input.size == 2) input[1].toInt() else 2)
         }
     }
 

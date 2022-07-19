@@ -38,6 +38,9 @@ class ClientCommunity : EuroCommunity() {
         verifiedTokens.removeAll(tokensToSend)
 
         send(receiver.address.toSocketAddress(), tokensToSend)
+
+        logger.info { "New verified balance: ${verifiedTokens.size}" }
+        logger.info { "New unverified balance: ${unverifiedTokens.size}" }
     }
 
     private fun sendToBank() {

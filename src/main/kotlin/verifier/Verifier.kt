@@ -48,7 +48,8 @@ private fun executeLine(inputString: String): Boolean {
             verifierCommunity.info()
         }
         "create" -> {
-            verifierCommunity.createAndSend(verifierCommunity.getFirstPeer()!!, 20)
+            verifierCommunity.createAndSend(verifierCommunity.getFirstPeer()!!,
+                if (input.size == 2) input[1].toInt() else 20)
         }
     }
 

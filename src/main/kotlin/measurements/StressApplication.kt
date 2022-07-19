@@ -1,8 +1,7 @@
-package old.stresstest
+package measurements
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import mu.KotlinLogging
 import nl.tudelft.ipv8.IPv8
 import nl.tudelft.ipv8.IPv8Configuration
@@ -13,6 +12,7 @@ import nl.tudelft.ipv8.messaging.EndpointAggregator
 import nl.tudelft.ipv8.messaging.udp.UdpEndpoint
 import nl.tudelft.ipv8.peerdiscovery.strategy.RandomWalk
 import java.net.InetAddress
+import kotlin.math.ceil
 
 class StressApplication {
     private val logger = KotlinLogging.logger {}
@@ -48,25 +48,23 @@ class StressApplication {
             return
         }
 
-        scope.launch {
-            val recipient = stressCommunity.getPeers().first()
-            val address = recipient.address
+        val recipient = stressCommunity.getPeers().first()
 
-            repeat(3000) {
-                val payload = StressPayload()
-                val packet = stressCommunity.serializePacket(
-                    StressCommunity.MessageId.STRESS_MESSAGE,
-                    payload,
-                    sign = true,
-                    encrypt = true,
-                    recipient = recipient
-                )
+        repeat(ceil((1e+8 / StressPayload.TEST_PAYLOAD.size)).toInt() * 3) {
 
-                udpEndpoint.send(address, packet)
-            }
+            val payload = StressPayload()
+            val packet = stressCommunity.serializePacket(
+                StressCommunity.MessageId.STRESS_MESSAGE,
+                payload,
+                sign = true,
+                encrypt = true,
+                recipient = recipient
+            )
 
-            logger.info { "Sent packet(s)" }
+            stressCommunity.endpoint.send(recipient, packet)
         }
+
+        logger.info { "Sent packet(s)" }
     }
 
     private fun createStressCommunity(): OverlayConfiguration<StressCommunity> {
