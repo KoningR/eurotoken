@@ -8,9 +8,13 @@ import nl.tudelft.ipv8.Peer
 import nl.tudelft.ipv8.keyvault.JavaCryptoProvider
 import nl.tudelft.ipv8.keyvault.PrivateKey
 import nl.tudelft.ipv8.messaging.EndpointAggregator
+import nl.tudelft.ipv8.messaging.eva.EVAProtocol
 import nl.tudelft.ipv8.messaging.udp.UdpEndpoint
 import nl.tudelft.ipv8.peerdiscovery.strategy.RandomWalk
 import java.net.InetAddress
+
+private val dispatcher = Dispatchers.IO
+private val scope = CoroutineScope(dispatcher)
 
 private lateinit var verifierCommunity: VerifierCommunity
 
@@ -27,6 +31,8 @@ suspend fun main() {
         ipv8.start()
 
         verifierCommunity = ipv8.getOverlay()!!
+        verifierCommunity.evaProtocol = EVAProtocol(verifierCommunity, scope, retransmitInterval = 150L)
+        verifierCommunity.setOnEVAReceiveCompleteCallback(verifierCommunity::onEvaComplete)
     }
 
     while (true) {

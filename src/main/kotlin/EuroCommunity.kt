@@ -1,14 +1,10 @@
-import client.ClientCommunity
 import mu.KotlinLogging
 import nl.tudelft.ipv8.Community
 import nl.tudelft.ipv8.IPv4Address
 import nl.tudelft.ipv8.Peer
 import nl.tudelft.ipv8.keyvault.PrivateKey
 import verifier.Verifier
-import java.net.DatagramPacket
 import java.net.DatagramSocket
-import java.net.SocketAddress
-import kotlin.math.min
 
 open class EuroCommunity : Community() {
     override val serviceId: String
@@ -16,10 +12,11 @@ open class EuroCommunity : Community() {
 
     internal val logger = KotlinLogging.logger {}
 
-    private val socket: DatagramSocket by lazy { endpoint.udpEndpoint!!.socket!! }
-
     internal val myPrivateKey: PrivateKey by lazy { myPeer.key as PrivateKey }
     internal val myPublicKey: ByteArray by lazy { myPeer.publicKey.keyToBin() }
+
+    // EVA requires an ID per transaction.
+    private var sendCounter = 0
 
     override fun getWalkableAddresses(): List<IPv4Address> {
         return listOf(
@@ -43,28 +40,17 @@ open class EuroCommunity : Community() {
         return null
     }
 
-    internal fun send(receiverAddress: SocketAddress, tokens: MutableCollection<Token>) {
+    internal fun send(receiver: Peer, tokens: MutableCollection<Token>) {
         // Assume tokens are already 'prepared' i.e. variables need not be changed.
         // Simply a helper method for mass serialization and sending.
 
-        val packet = ByteArray(EURO_MAX_PACKET_SIZE)
-        System.arraycopy(prefix, 0, packet, 0, prefix.size)
-        packet[prefix.size] = ClientCommunity.EURO_CLIENT_MESSAGE
+        val data = ByteArray(tokens.size * Token.TOKEN_SIZE)
+        Token.serialize(tokens, data)
 
-        var unsentAmount = tokens.size
-        while (unsentAmount > 0) {
-            // Send as many tokens as possible per packet.
-            val sendAmount = min(unsentAmount, EURO_MAX_TOKENS_PER_PACKET)
+        evaSendBinary(receiver, serviceId, sendCounter++.toString(), data)
 
-            val tokensInPacket = tokens.take(sendAmount)
-
-            Token.serialize(tokensInPacket, packet)
-            socket.send(DatagramPacket(packet, 0,
-                EURO_IPV8_PREFIX_SIZE + sendAmount * Token.TOKEN_SIZE, receiverAddress))
-
-            tokens.removeAll(tokensInPacket)
-            unsentAmount -= sendAmount
-        }
+        // Remove tokens that were sent.
+        tokens.clear()
     }
 
     companion object {

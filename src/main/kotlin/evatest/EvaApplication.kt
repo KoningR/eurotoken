@@ -14,7 +14,6 @@ import nl.tudelft.ipv8.messaging.eva.TransferProgress
 import nl.tudelft.ipv8.messaging.udp.UdpEndpoint
 import nl.tudelft.ipv8.peerdiscovery.strategy.RandomWalk
 import java.net.InetAddress
-import kotlin.math.floor
 
 class EvaApplication {
     private val logger = KotlinLogging.logger {}

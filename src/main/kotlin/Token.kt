@@ -55,7 +55,7 @@ class Token(internal val id: ByteArray,
             // Do not check how many tokens are present in the input.
             // Do not perform cryptography, simply serialize.
 
-            var i = EURO_IPV8_PREFIX_SIZE
+            var i = 0
             for (token in tokens) {
                 System.arraycopy(token.id, 0, data, i, ID_SIZE)
                 i += ID_SIZE
@@ -74,20 +74,18 @@ class Token(internal val id: ByteArray,
             }
         }
 
-        internal fun deserialize(packet: Packet): MutableCollection<Token> {
-
-            val data = packet.data
+        internal fun deserialize(data: ByteArray): MutableCollection<Token> {
             val size = data.size
 
-            if ((size - EURO_IPV8_PREFIX_SIZE) % TOKEN_SIZE != 0) {
+            if (size % TOKEN_SIZE != 0) {
                 logger.info { "Packet was not of the correct size!" }
                 return mutableListOf()
             }
 
-            val tokenAmount = (size - EURO_IPV8_PREFIX_SIZE) / TOKEN_SIZE
+            val tokenAmount = size / TOKEN_SIZE
             val tokens = mutableListOf<Token>()
 
-            var i = EURO_IPV8_PREFIX_SIZE
+            var i = 0
             repeat(tokenAmount) {
                 val id = ByteArray(ID_SIZE)
                 val sender = ByteArray(SENDER_SIZE)

@@ -7,9 +7,13 @@ import nl.tudelft.ipv8.OverlayConfiguration
 import nl.tudelft.ipv8.Peer
 import nl.tudelft.ipv8.keyvault.JavaCryptoProvider
 import nl.tudelft.ipv8.messaging.EndpointAggregator
+import nl.tudelft.ipv8.messaging.eva.EVAProtocol
 import nl.tudelft.ipv8.messaging.udp.UdpEndpoint
 import nl.tudelft.ipv8.peerdiscovery.strategy.RandomWalk
 import java.net.InetAddress
+
+private val dispatcher = Dispatchers.IO
+private val scope = CoroutineScope(dispatcher)
 
 private lateinit var clientCommunity: ClientCommunity
 
@@ -26,7 +30,7 @@ suspend fun main() {
     //      Initialise packets statically.
     //      Replace calls of toSocketAddress().
 
-    withContext(Dispatchers.IO) {
+    withContext(dispatcher) {
         val udpEndpoint=  UdpEndpoint(8090, InetAddress.getByName("0.0.0.0"))
 
         val endpointAggregator = EndpointAggregator(udpEndpoint, null)
@@ -39,6 +43,8 @@ suspend fun main() {
         ipv8.start()
 
         clientCommunity = ipv8.getOverlay()!!
+        clientCommunity.evaProtocol = EVAProtocol(clientCommunity, scope, retransmitInterval = 150L)
+        clientCommunity.setOnEVAReceiveCompleteCallback(clientCommunity::onEvaComplete)
     }
 
     while (true) {

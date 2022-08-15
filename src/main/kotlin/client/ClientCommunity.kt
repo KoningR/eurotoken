@@ -4,7 +4,6 @@ import EuroCommunity
 import Token
 import nl.tudelft.ipv8.Overlay
 import nl.tudelft.ipv8.Peer
-import nl.tudelft.ipv8.messaging.Packet
 import verifier.Verifier
 
 class ClientCommunity : EuroCommunity() {
@@ -13,10 +12,6 @@ class ClientCommunity : EuroCommunity() {
 
     private val unverifiedTokens: MutableSet<Token> = mutableSetOf()
     private val verifiedTokens: MutableSet<Token> = mutableSetOf()
-
-    init {
-        messageHandlers[EURO_CLIENT_MESSAGE.toInt()] = ::receive
-    }
 
     internal fun info() {
         logger.info { getPeers().size }
@@ -37,33 +32,14 @@ class ClientCommunity : EuroCommunity() {
 
         verifiedTokens.removeAll(tokensToSend)
 
-        send(receiver.address.toSocketAddress(), tokensToSend)
+        send(receiver, tokensToSend)
 
         logger.info { "New verified balance: ${verifiedTokens.size}" }
         logger.info { "New unverified balance: ${unverifiedTokens.size}" }
     }
 
-    private fun sendToBank() {
-        // TODO: Calls to toSocketAddress() might be very slow.
-        send(verifierAddress.address.toSocketAddress(), unverifiedTokens)
-    }
-
-    private fun getVerifier(): Peer? {
-        if (getPeers().isEmpty()) {
-            return null
-        }
-
-        for (peer in getPeers()) {
-            if (peer.publicKey.keyToBin() contentEquals verifierKey) {
-                return peer
-            }
-        }
-
-        return null
-    }
-
-    private fun receive(packet: Packet) {
-        val receivedTokens = Token.deserialize(packet)
+    internal fun onEvaComplete(peer: Peer, info: String, id: String, data: ByteArray?) {
+        val receivedTokens = Token.deserialize(data!!)
         for (token in receivedTokens) {
 
             if (!(token.receiver contentEquals myPublicKey)) {
@@ -87,6 +63,24 @@ class ClientCommunity : EuroCommunity() {
         logger.info { "New unverified balance: ${unverifiedTokens.size}" }
 
         sendToBank()
+    }
+
+    private fun sendToBank() {
+        send(verifierAddress, unverifiedTokens)
+    }
+
+    private fun getVerifier(): Peer? {
+        if (getPeers().isEmpty()) {
+            return null
+        }
+
+        for (peer in getPeers()) {
+            if (peer.publicKey.keyToBin() contentEquals verifierKey) {
+                return peer
+            }
+        }
+
+        return null
     }
 
     companion object MessageId {

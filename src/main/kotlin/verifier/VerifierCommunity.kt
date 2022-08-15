@@ -2,23 +2,13 @@ package verifier
 
 import EuroCommunity
 import Token
-import client.ClientCommunity
-import nl.tudelft.ipv8.IPv4Address
 import nl.tudelft.ipv8.Overlay
 import nl.tudelft.ipv8.Peer
-import nl.tudelft.ipv8.messaging.Packet
-import java.net.DatagramPacket
 import java.net.DatagramSocket
 import kotlin.random.Random
 
 class VerifierCommunity : EuroCommunity() {
-    private val socket: DatagramSocket by lazy { endpoint.udpEndpoint!!.socket!! }
-
     private val tokens = mutableMapOf<TokenId, Token>()
-
-    init {
-        messageHandlers[ClientCommunity.EURO_CLIENT_MESSAGE.toInt()] = ::receive
-    }
 
     internal fun info() {
         logger.info { getPeers().size }
@@ -37,13 +27,13 @@ class VerifierCommunity : EuroCommunity() {
             newTokens.add(token)
         }
 
-        send(receiver.address.toSocketAddress(), newTokens)
+        send(receiver, newTokens)
 
         logger.info { "Create $amount new tokens!" }
     }
 
-    private fun receive(packet: Packet) {
-        val receivedTokens = Token.deserialize(packet)
+    internal fun onEvaComplete(peer: Peer, info: String, id: String, data: ByteArray?) {
+        val receivedTokens = Token.deserialize(data!!)
         val verifiedTokens = mutableListOf<Token>()
 
         val iter = receivedTokens.iterator()
@@ -82,12 +72,10 @@ class VerifierCommunity : EuroCommunity() {
             verifiedTokens.add(oldToken)
         }
 
-        Token.serialize(verifiedTokens, packet.data)
-        socket.send(DatagramPacket(packet.data, 0,
-            EURO_IPV8_PREFIX_SIZE + verifiedTokens.size * Token.TOKEN_SIZE,
-            (packet.source as IPv4Address).toSocketAddress()))
-
         logger.info { "Received ${verifiedTokens.size} tokens and verified them!" }
+
+        Token.serialize(verifiedTokens, data)
+        send(peer, verifiedTokens)
     }
 
     class Factory : Overlay.Factory<VerifierCommunity>(VerifierCommunity::class.java) {
