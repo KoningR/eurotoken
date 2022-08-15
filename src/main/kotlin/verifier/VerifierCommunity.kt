@@ -84,7 +84,7 @@ class VerifierCommunity : EuroCommunity() {
 
         Token.serialize(verifiedTokens, packet.data)
         socket.send(DatagramPacket(packet.data, 0,
-            EURO_IPV8_PREFIX_SIZE + verifiedTokens.size * Token.ID_SIZE,
+            EURO_IPV8_PREFIX_SIZE + verifiedTokens.size * Token.TOKEN_SIZE,
             (packet.source as IPv4Address).toSocketAddress()))
 
         logger.info { "Received ${verifiedTokens.size} tokens and verified them!" }
