@@ -17,20 +17,20 @@ class ClientCommunity : EuroCommunity() {
         logger.info { getPeers().size }
     }
 
-    internal fun sendToPeer(receiver: Peer, amount: Int) {
-        if (verifiedTokens.size < amount) {
+    internal fun sendToPeer(receiver: Peer, amount: Int, verified: Boolean) {
+        val tokens =  if (verified) verifiedTokens else unverifiedTokens
+
+        if (tokens.size < amount) {
             logger.info { "Insufficient balance!" }
             return
         }
 
-        val tokensToSend = verifiedTokens.take(amount).toMutableList()
+        val tokensToSend = tokens.take(amount).toMutableSet()
         for (token in tokensToSend) {
-            token.sender = myPublicKey
-            token.receiver = receiver.publicKey.keyToBin()
-            token.sign(myPrivateKey)
+            token.sign(receiver.publicKey.keyToBin(), myPrivateKey)
         }
 
-        verifiedTokens.removeAll(tokensToSend)
+        tokens.removeAll(tokensToSend)
 
         send(receiver, tokensToSend)
 
@@ -40,19 +40,22 @@ class ClientCommunity : EuroCommunity() {
 
     internal fun onEvaComplete(peer: Peer, info: String, id: String, data: ByteArray?) {
         val receivedTokens = Token.deserialize(data!!)
+
         for (token in receivedTokens) {
 
-            if (!(token.receiver contentEquals myPublicKey)) {
+            if (!(token.recipients.last().publicKey contentEquals myPublicKey)) {
                 logger.info { "Received a token that was meant for someone else!" }
                 continue
             }
 
-            if (!token.verifySenderSignature()) {
-                logger.info { "Received a token that was not signed by its proclaimed sender!" }
+            if (!token.verifyRecipients(verifierKey)) {
                 continue
             }
 
-            if (token.sender contentEquals verifierKey) {
+            // If the token is completely verified and it has 1 recipient, namely this object,
+            // then it must have been sent directly from a verifier and is therefore a verified
+            // token.
+            if (token.numRecipients == 1) {
                 verifiedTokens.add(token)
             } else {
                 unverifiedTokens.add(token)
@@ -61,12 +64,17 @@ class ClientCommunity : EuroCommunity() {
 
         logger.info { "New verified balance: ${verifiedTokens.size}" }
         logger.info { "New unverified balance: ${unverifiedTokens.size}" }
-
-        sendToBank()
     }
 
-    private fun sendToBank() {
+    internal fun sendToBank() {
+        if (unverifiedTokens.isEmpty()) {
+            logger.info { "There are no unverified tokens!" }
+            return
+        }
+
         send(verifierAddress, unverifiedTokens)
+
+        logger.info { "Sent unverified tokens to a verifier!" }
     }
 
     private fun getVerifier(): Peer? {
@@ -81,10 +89,6 @@ class ClientCommunity : EuroCommunity() {
         }
 
         return null
-    }
-
-    companion object MessageId {
-        const val EURO_CLIENT_MESSAGE: Byte = 0b111
     }
 
     class Factory : Overlay.Factory<ClientCommunity>(ClientCommunity::class.java) {

@@ -1,10 +1,10 @@
 package verifier
 
 import EuroCommunity
+import RecipientPair
 import Token
 import nl.tudelft.ipv8.Overlay
 import nl.tudelft.ipv8.Peer
-import java.net.DatagramSocket
 import kotlin.random.Random
 
 class VerifierCommunity : EuroCommunity() {
@@ -15,7 +15,7 @@ class VerifierCommunity : EuroCommunity() {
     }
 
     internal fun createAndSend(receiver: Peer, amount: Int) {
-        val newTokens = mutableListOf<Token>()
+        val newTokens = mutableSetOf<Token>()
 
         repeat(amount) {
             val id = Random.nextBytes(Token.ID_SIZE)
@@ -34,48 +34,53 @@ class VerifierCommunity : EuroCommunity() {
 
     internal fun onEvaComplete(peer: Peer, info: String, id: String, data: ByteArray?) {
         val receivedTokens = Token.deserialize(data!!)
-        val verifiedTokens = mutableListOf<Token>()
 
-        val iter = receivedTokens.iterator()
-        while (iter.hasNext()) {
-            val receivedToken = iter.next()
-
-            if (!receivedToken.verifySenderSignature()) {
-                logger.info { "Received a token that was not signed by its proclaimed sender!" }
-                iter.remove()
+        for (token in receivedTokens) {
+            if (token.numRecipients == 1) {
+                logger.info { "Token is already verified!" }
                 continue
             }
 
-            val oldToken = tokens[TokenId(receivedToken.id)]
+            if (!(myPublicKey contentEquals token.verifier)) {
+                logger.info { "Token was not signed by this verifier!" }
+                continue
+            }
+
+            val oldToken = tokens[TokenId(token.id)]
             if (oldToken == null) {
-                logger.info { "Received a token ID that does not exist!" }
-                iter.remove()
+                logger.info { "Token ID does not exist!" }
                 continue
             }
 
-            if (oldToken.value != receivedToken.value) {
-                logger.info { "Received a token with a differing value!" }
-                iter.remove()
+            if (oldToken.value != token.value) {
+                logger.info { "Token has been given a different value!" }
                 continue
             }
 
-            if (!(oldToken.receiver contentEquals receivedToken.sender)) {
-                logger.info { "Received a token that was not signed by its owner!" }
-                iter.remove()
+            if (!token.verifyRecipients(myPublicKey)) {
                 continue
             }
 
-            // Update the last known entry of the token.
-            oldToken.receiver = receivedToken.receiver
-            oldToken.sign(myPrivateKey)
+            val lastRecipient = token.recipients.last().publicKey
+            val lastSignature = token.recipients.last().proof
 
-            verifiedTokens.add(oldToken)
+            token.genesisHash = lastSignature
+
+            token.recipients.clear()
+            token.recipients.add(
+                RecipientPair(
+                    lastRecipient,
+                    myPrivateKey.sign(token.id + token.value + lastSignature + lastRecipient)
+                )
+            )
+            token.numRecipients = 1
+
+            tokens[TokenId(token.id)] = token
         }
 
-        logger.info { "Received ${verifiedTokens.size} tokens and verified them!" }
+        logger.info { "Received ${receivedTokens.size} tokens and verified them!" }
 
-        Token.serialize(verifiedTokens, data)
-        send(peer, verifiedTokens)
+        send(peer, receivedTokens)
     }
 
     class Factory : Overlay.Factory<VerifierCommunity>(VerifierCommunity::class.java) {

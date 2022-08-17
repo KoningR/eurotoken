@@ -65,9 +65,22 @@ private fun executeLine(inputString: String): Boolean {
         "info" -> {
             clientCommunity.info()
         }
-        "send" -> {
-            clientCommunity.sendToPeer(clientCommunity.getFirstPeer()!!,
-                if (input.size == 2) input[1].toInt() else 2)
+        "sendverified" -> {
+            clientCommunity.sendToPeer(
+                clientCommunity.getFirstPeer()!!,
+                if (input.size == 2) input[1].toInt() else 2,
+                true)
+        }
+
+        "sendunverified" -> {
+            clientCommunity.sendToPeer(
+                clientCommunity.getFirstPeer()!!,
+                if (input.size == 2) input[1].toInt() else 2,
+                false)
+        }
+
+        "sendtobank" -> {
+            clientCommunity.sendToBank()
         }
     }
 
