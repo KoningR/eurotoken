@@ -3,7 +3,25 @@ import nl.tudelft.ipv8.keyvault.JavaCryptoProvider
 import nl.tudelft.ipv8.keyvault.PrivateKey
 import kotlin.random.Random
 
-data class RecipientPair(val publicKey: ByteArray, val proof: ByteArray)
+data class RecipientPair(val publicKey: ByteArray, val proof: ByteArray) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+
+        other as RecipientPair
+
+        if (!publicKey.contentEquals(other.publicKey)) return false
+        if (!proof.contentEquals(other.proof)) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = publicKey.contentHashCode()
+        result = 31 * result + proof.contentHashCode()
+        return result
+    }
+}
 
 class Token(
     internal val id: ByteArray,
@@ -63,7 +81,7 @@ class Token(
         return true
     }
 
-    internal fun sign(newRecipient: ByteArray, privateKey: PrivateKey) {
+    internal fun signByPeer(newRecipient: ByteArray, privateKey: PrivateKey) {
         recipients.add(
             RecipientPair(
                 newRecipient,
@@ -85,14 +103,12 @@ class Token(
         private const val RECIPIENT_PAIR_SIZE = PUBLIC_KEY_SIZE + SIGNATURE_SIZE
         private const val TOKEN_CREATION_SIZE = ID_SIZE + VALUE_SIZE + PUBLIC_KEY_SIZE + SIGNATURE_SIZE
 
-        internal fun create(id: ByteArray, value: Byte, verifier: ByteArray, firstRecipient: ByteArray, privateKey: PrivateKey): Token {
-            val genesisHash = Random.nextBytes(SIGNATURE_SIZE)
-            val signature = privateKey.sign(id + value + genesisHash + firstRecipient)
-
-            val recipients = mutableListOf<RecipientPair>()
-            recipients.add(RecipientPair(firstRecipient, signature))
-
-            return Token(id, value, verifier, genesisHash, recipients)
+        internal fun create(value: Byte, verifier: ByteArray): Token {
+            return Token(Random.nextBytes(ID_SIZE),
+                value,
+                verifier,
+                Random.nextBytes(SIGNATURE_SIZE),
+                mutableListOf())
         }
 
         internal fun serialize(tokens: Collection<Token>): ByteArray {

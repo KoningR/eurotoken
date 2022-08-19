@@ -17,7 +17,7 @@ class ClientCommunity : EuroCommunity() {
         logger.info { getPeers().size }
     }
 
-    internal fun sendToPeer(receiver: Peer, amount: Int, verified: Boolean) {
+    internal fun sendToPeer(receiver: Peer, amount: Int, verified: Boolean, doubleSpend: Boolean = false) {
         val tokens =  if (verified) verifiedTokens else unverifiedTokens
 
         if (tokens.size < amount) {
@@ -27,10 +27,12 @@ class ClientCommunity : EuroCommunity() {
 
         val tokensToSend = tokens.take(amount).toMutableSet()
         for (token in tokensToSend) {
-            token.sign(receiver.publicKey.keyToBin(), myPrivateKey)
+            token.signByPeer(receiver.publicKey.keyToBin(), myPrivateKey)
         }
 
-        tokens.removeAll(tokensToSend)
+        if (!doubleSpend) {
+            tokens.removeAll(tokensToSend)
+        }
 
         send(receiver, tokensToSend)
 
@@ -73,6 +75,7 @@ class ClientCommunity : EuroCommunity() {
         }
 
         send(verifierAddress, unverifiedTokens)
+        unverifiedTokens.clear()
 
         logger.info { "Sent unverified tokens to a verifier!" }
     }

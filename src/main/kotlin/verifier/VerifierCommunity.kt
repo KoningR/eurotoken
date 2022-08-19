@@ -5,7 +5,6 @@ import RecipientPair
 import Token
 import nl.tudelft.ipv8.Overlay
 import nl.tudelft.ipv8.Peer
-import kotlin.random.Random
 
 class VerifierCommunity : EuroCommunity() {
     private val tokens = mutableMapOf<TokenId, Token>()
@@ -18,22 +17,43 @@ class VerifierCommunity : EuroCommunity() {
         val newTokens = mutableSetOf<Token>()
 
         repeat(amount) {
-            val id = Random.nextBytes(Token.ID_SIZE)
-            val value: Byte = 0b1
-            val token = Token.create(id, value, myPublicKey,
-                receiver.publicKey.keyToBin(), myPrivateKey)
+            val token = Token.create(0b1, myPublicKey)
+            signByVerifier(token, token.genesisHash, receiver.publicKey.keyToBin())
 
-            tokens[TokenId(id)] = token
+            tokens[TokenId(token.id)] = token
+
             newTokens.add(token)
         }
 
         send(receiver, newTokens)
 
+        // If you add the last transaction to the list, the in-memory
+        // object will get updated as well. As per protocol, the
+        // verifier should not store this, and thus we remove it
+        // afterwards.
+        newTokens.forEach {
+            it.recipients.removeLast()
+            it.numRecipients = 0
+        }
+
         logger.info { "Create $amount new tokens!" }
     }
 
     internal fun onEvaComplete(peer: Peer, info: String, id: String, data: ByteArray?) {
+
+        // TODO: Encrypt the entire history with the verifier's public key
+        //  such that individuals cannot see it and privacy is maintained better?
+        //  Also this removes the need to chain hashes because simple integer counters
+        //  can then be used.
+
+        // TODO: What if person keeps paying with the unverified version of a token
+        //  after having it verified?
+
+        // TODO: Maybe add all transactions including the genesis transaction to the
+        //  recipients list?
+
         val receivedTokens = Token.deserialize(data!!)
+        val verifiedTokens = mutableSetOf<Token>()
 
         for (token in receivedTokens) {
             if (token.numRecipients == 1) {
@@ -61,26 +81,67 @@ class VerifierCommunity : EuroCommunity() {
                 continue
             }
 
+            val lastRedeemedProof = if (oldToken.numRecipients == 0) {
+                oldToken.genesisHash
+            } else {
+                oldToken.recipients.last().proof
+            }
+
+            if (!(lastRedeemedProof contentEquals token.genesisHash)) {
+                logger.info { "Detected an attempt at double spending!" }
+
+                findDoubleSpend(token, oldToken)
+
+                continue
+            }
+
+            oldToken.recipients.addAll(token.recipients)
+            oldToken.numRecipients += token.recipients.size
+
             val lastRecipient = token.recipients.last().publicKey
-            val lastSignature = token.recipients.last().proof
+            val lastProof = token.recipients.last().proof
 
-            token.genesisHash = lastSignature
+            signByVerifier(token, lastProof, lastRecipient)
 
-            token.recipients.clear()
-            token.recipients.add(
-                RecipientPair(
-                    lastRecipient,
-                    myPrivateKey.sign(token.id + token.value + lastSignature + lastRecipient)
-                )
-            )
-            token.numRecipients = 1
-
-            tokens[TokenId(token.id)] = token
+            verifiedTokens.add(token)
         }
 
-        logger.info { "Received ${receivedTokens.size} tokens and verified them!" }
+        logger.info { "Received ${verifiedTokens.size} valid tokens and verified them!" }
 
-        send(peer, receivedTokens)
+        send(peer, verifiedTokens)
+    }
+
+    private fun findDoubleSpend(receivedToken: Token, realToken: Token) {
+
+//        val genesisHashOfReceivedToken = receivedToken.genesisHash
+//
+//        var foundIndex = 0
+//        for ((i, recipientPair) in realToken.recipients.withIndex()) {
+//            if (recipientPair.proof contentEquals genesisHashOfReceivedToken) {
+//                foundIndex = i
+//                break
+//            }
+//        }
+//
+//        val alignedHistory = realToken.recipients.subList(foundIndex, realToken.recipients.size)
+//        for (pair in (receivedToken.recipients zip alignedHistory)) {
+//            if (pair.first != pair.second) {
+//                logger.info { "Double spending detected!" }
+//            }
+//        }
+    }
+
+    private fun signByVerifier(token: Token, lastRedeemedHash: ByteArray, recipient: ByteArray) {
+        token.genesisHash = lastRedeemedHash
+        token.recipients.clear()
+        // Note that the verifier does not store this last signature.
+        token.recipients.add(
+            RecipientPair(
+                recipient,
+                myPrivateKey.sign(token.id + token.value + lastRedeemedHash + recipient)
+            )
+        )
+        token.numRecipients = 1
     }
 
     class Factory : Overlay.Factory<VerifierCommunity>(VerifierCommunity::class.java) {

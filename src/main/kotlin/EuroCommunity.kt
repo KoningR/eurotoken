@@ -47,8 +47,5 @@ open class EuroCommunity : Community() {
         val data = Token.serialize(tokens)
 
         evaSendBinary(receiver, serviceId, sendCounter++.toString(), data)
-
-        // Remove tokens that were sent.
-        tokens.clear()
     }
 }
