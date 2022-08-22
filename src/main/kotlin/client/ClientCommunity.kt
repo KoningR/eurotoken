@@ -30,11 +30,15 @@ class ClientCommunity : EuroCommunity() {
             token.signByPeer(receiver.publicKey.keyToBin(), myPrivateKey)
         }
 
-        if (!doubleSpend) {
+        send(receiver, tokensToSend)
+
+        if (doubleSpend) {
+            tokensToSend.forEach {
+                it.recipients.removeLast()
+            }
+        } else {
             tokens.removeAll(tokensToSend)
         }
-
-        send(receiver, tokensToSend)
 
         logger.info { "New verified balance: ${verifiedTokens.size}" }
         logger.info { "New unverified balance: ${unverifiedTokens.size}" }

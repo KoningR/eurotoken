@@ -27,15 +27,6 @@ class VerifierCommunity : EuroCommunity() {
 
         send(receiver, newTokens)
 
-        // If you add the last transaction to the list, the in-memory
-        // object will get updated as well. As per protocol, the
-        // verifier should not store this, and thus we remove it
-        // afterwards.
-        newTokens.forEach {
-            it.recipients.removeLast()
-            it.numRecipients = 0
-        }
-
         logger.info { "Create $amount new tokens!" }
     }
 
@@ -55,55 +46,51 @@ class VerifierCommunity : EuroCommunity() {
         val receivedTokens = Token.deserialize(data!!)
         val verifiedTokens = mutableSetOf<Token>()
 
-        for (token in receivedTokens) {
-            if (token.numRecipients == 1) {
+        for (receivedToken in receivedTokens) {
+            if (receivedToken.numRecipients == 1) {
                 logger.info { "Token is already verified!" }
                 continue
             }
 
-            if (!(myPublicKey contentEquals token.verifier)) {
+            if (!(myPublicKey contentEquals receivedToken.verifier)) {
                 logger.info { "Token was not signed by this verifier!" }
                 continue
             }
 
-            val oldToken = tokens[TokenId(token.id)]
-            if (oldToken == null) {
+            val verifiedToken = tokens[TokenId(receivedToken.id)]
+            if (verifiedToken == null) {
                 logger.info { "Token ID does not exist!" }
                 continue
             }
 
-            if (oldToken.value != token.value) {
+            if (verifiedToken.value != receivedToken.value) {
                 logger.info { "Token has been given a different value!" }
                 continue
             }
 
-            if (!token.verifyRecipients(myPublicKey)) {
+            if (!receivedToken.verifyRecipients(myPublicKey)) {
                 continue
             }
 
-            val lastRedeemedProof = if (oldToken.numRecipients == 0) {
-                oldToken.genesisHash
-            } else {
-                oldToken.recipients.last().proof
-            }
+            val lastVerifiedProof = verifiedToken.lastProof
 
-            if (!(lastRedeemedProof contentEquals token.genesisHash)) {
+            if (!(lastVerifiedProof contentEquals receivedToken.firstProof)) {
                 logger.info { "Detected an attempt at double spending!" }
 
-                findDoubleSpend(token, oldToken)
+                findDoubleSpend(receivedToken, verifiedToken)
 
                 continue
             }
 
-            oldToken.recipients.addAll(token.recipients)
-            oldToken.numRecipients += token.recipients.size
+            verifiedToken.recipients.addAll(receivedToken.recipients.subList(1, receivedToken.numRecipients))
 
-            val lastRecipient = token.recipients.last().publicKey
-            val lastProof = token.recipients.last().proof
+            val lastRecipient = receivedToken.lastRecipient
+            val lastProof = receivedToken.lastProof
 
-            signByVerifier(token, lastProof, lastRecipient)
+            val newRecipientPair = signByVerifier(receivedToken, lastProof, lastRecipient)
+            verifiedToken.recipients.add(newRecipientPair)
 
-            verifiedTokens.add(token)
+            verifiedTokens.add(receivedToken)
         }
 
         logger.info { "Received ${verifiedTokens.size} valid tokens and verified them!" }
@@ -113,35 +100,37 @@ class VerifierCommunity : EuroCommunity() {
 
     private fun findDoubleSpend(receivedToken: Token, realToken: Token) {
 
-//        val genesisHashOfReceivedToken = receivedToken.genesisHash
-//
-//        var foundIndex = 0
-//        for ((i, recipientPair) in realToken.recipients.withIndex()) {
-//            if (recipientPair.proof contentEquals genesisHashOfReceivedToken) {
-//                foundIndex = i
-//                break
-//            }
-//        }
-//
-//        val alignedHistory = realToken.recipients.subList(foundIndex, realToken.recipients.size)
-//        for (pair in (receivedToken.recipients zip alignedHistory)) {
-//            if (pair.first != pair.second) {
-//                logger.info { "Double spending detected!" }
-//            }
-//        }
+        val genesisHashOfReceivedToken = receivedToken.genesisHash
+
+        var foundIndex = 0
+        for ((i, recipientPair) in realToken.recipients.withIndex()) {
+            if (recipientPair.proof contentEquals genesisHashOfReceivedToken) {
+                foundIndex = i
+                break
+            }
+        }
+
+        val historySinceLastRedeemedProof = realToken.recipients.subList(foundIndex, realToken.numRecipients)
+
+        for (pair in (receivedToken.recipients zip historySinceLastRedeemedProof)) {
+            if (pair.first != pair.second) {
+                logger.info { "Double spending verified!" }
+                return
+            }
+        }
     }
 
-    private fun signByVerifier(token: Token, lastRedeemedHash: ByteArray, recipient: ByteArray) {
-        token.genesisHash = lastRedeemedHash
-        token.recipients.clear()
-        // Note that the verifier does not store this last signature.
-        token.recipients.add(
-            RecipientPair(
-                recipient,
-                myPrivateKey.sign(token.id + token.value + lastRedeemedHash + recipient)
-            )
+    private fun signByVerifier(token: Token, lastVerifiedProof: ByteArray, recipient: ByteArray): RecipientPair {
+        val newRecipientPair = RecipientPair(
+            recipient,
+            myPrivateKey.sign(token.id + token.value + lastVerifiedProof + recipient)
         )
-        token.numRecipients = 1
+
+        token.genesisHash = lastVerifiedProof
+        token.recipients.clear()
+        token.recipients.add(newRecipientPair)
+
+        return newRecipientPair
     }
 
     class Factory : Overlay.Factory<VerifierCommunity>(VerifierCommunity::class.java) {

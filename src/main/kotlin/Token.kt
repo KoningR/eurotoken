@@ -30,8 +30,20 @@ class Token(
     internal var genesisHash: ByteArray,
     internal val recipients: MutableList<RecipientPair>
 ) {
+    internal val numRecipients: Int
+        get() = recipients.size
 
-    internal var numRecipients: Int = recipients.size
+    internal val lastRecipient: ByteArray
+        get() = recipients.last().publicKey
+
+    internal val lastProof: ByteArray
+        get() = recipients.last().proof
+
+    internal val firstRecipient: ByteArray
+        get() = recipients.first().publicKey
+
+    internal val firstProof: ByteArray
+        get() = recipients.first().proof
 
     override fun hashCode(): Int {
         return id.hashCode()
@@ -88,15 +100,13 @@ class Token(
                 privateKey.sign(recipients.last().proof + newRecipient)
             )
         )
-
-        numRecipients++
     }
 
     companion object {
         private val logger = KotlinLogging.logger {}
 
         // TODO: Write a unit test to verify that these values are still correct.
-        const val ID_SIZE = 8
+        private const val ID_SIZE = 8
         private const val VALUE_SIZE = 1
         private const val PUBLIC_KEY_SIZE = 74
         private const val SIGNATURE_SIZE = 64
