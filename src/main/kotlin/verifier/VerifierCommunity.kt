@@ -5,6 +5,8 @@ import RecipientPair
 import Token
 import nl.tudelft.ipv8.Overlay
 import nl.tudelft.ipv8.Peer
+import nl.tudelft.ipv8.keyvault.JavaCryptoProvider
+import nl.tudelft.ipv8.util.toHex
 
 class VerifierCommunity : EuroCommunity() {
     private val tokens = mutableMapOf<TokenId, Token>()
@@ -27,7 +29,7 @@ class VerifierCommunity : EuroCommunity() {
 
         send(receiver, newTokens)
 
-        logger.info { "Create $amount new tokens!" }
+        logger.info { "Created $amount new tokens!" }
     }
 
     internal fun onEvaComplete(peer: Peer, info: String, id: String, data: ByteArray?) {
@@ -40,8 +42,16 @@ class VerifierCommunity : EuroCommunity() {
         // TODO: What if person keeps paying with the unverified version of a token
         //  after having it verified?
 
-        // TODO: Maybe add all transactions including the genesis transaction to the
-        //  recipients list?
+        // TODO: Add a mechanism to ensure parties really try to verify tokens for themselves.
+        //  Currently it is possible to cut a token in half and redeem/verify money for someone else.
+        //  This makes it so people can flag others as double spenders.
+
+        // TODO: How to deal with sequential double spends?
+
+        // TODO: Although replay attacks will be detected by the verifier, individual
+        //  clients currently still accept tokens they have already received.
+        //  Upon validating these tokens, they are rejected, the victim is blamed for
+        //  the replay attack and the original attacked cannot be detected.
 
         val receivedTokens = Token.deserialize(data!!)
         val verifiedTokens = mutableSetOf<Token>()
@@ -75,8 +85,6 @@ class VerifierCommunity : EuroCommunity() {
             val lastVerifiedProof = verifiedToken.lastProof
 
             if (!(lastVerifiedProof contentEquals receivedToken.firstProof)) {
-                logger.info { "Detected an attempt at double spending!" }
-
                 findDoubleSpend(receivedToken, verifiedToken)
 
                 continue
@@ -98,26 +106,55 @@ class VerifierCommunity : EuroCommunity() {
         send(peer, verifiedTokens)
     }
 
-    private fun findDoubleSpend(receivedToken: Token, realToken: Token) {
+    private fun findDoubleSpend(receivedToken: Token, verifiedToken: Token) {
 
-        val genesisHashOfReceivedToken = receivedToken.genesisHash
+        val receivedFirstProof = receivedToken.firstProof
 
-        var foundIndex = 0
-        for ((i, recipientPair) in realToken.recipients.withIndex()) {
-            if (recipientPair.proof contentEquals genesisHashOfReceivedToken) {
-                foundIndex = i
+        // The first proof of the received token must exist somewhere in the history
+        // of the verified token. This is because we have already verified the token's
+        // proof chain, which requires that its first proof is signed by the verifier itself.
+        // Therefore, the verifier must have a record of it.
+        // It is also not possible for indexOfReceivedProof to point
+        // to the last element in the list. If it were, then the first
+        // proof of the received token would be equal to the last proof
+        // of the verified token, which only happens when there is no
+        // double spending or when it cannot yet be detected. Thus, this
+        // function would have never been called.
+        var indexOfReceivedProof = 0
+        for ((i, recipientPair) in verifiedToken.recipients.withIndex()) {
+            if (recipientPair.proof contentEquals receivedFirstProof) {
+                indexOfReceivedProof = i
                 break
             }
         }
 
-        val historySinceLastRedeemedProof = realToken.recipients.subList(foundIndex, realToken.numRecipients)
+        val historySinceReceivedProof = verifiedToken.recipients.subList(
+            indexOfReceivedProof,
+            verifiedToken.numRecipients)
 
-        for (pair in (receivedToken.recipients zip historySinceLastRedeemedProof)) {
-            if (pair.first != pair.second) {
-                logger.info { "Double spending verified!" }
+        // In the first iteration of this loop, the compared pair will always
+        // be identical.
+        var doubleSpender = receivedToken.firstRecipient
+        for (pair in (receivedToken.recipients zip historySinceReceivedProof)) {
+            if (pair.first.proof contentEquals pair.second.proof) {
+                doubleSpender = pair.first.publicKey
+            } else {
+                val doubleSpenderName = JavaCryptoProvider.keyFromPublicBin(doubleSpender).keyToHash().toHex()
+                logger.info { "$doubleSpenderName attempted to double spend!" }
+
                 return
             }
         }
+
+        if (receivedToken.numRecipients != historySinceReceivedProof.size) {
+            val doubleSpenderName = JavaCryptoProvider.keyFromPublicBin(doubleSpender).keyToHash().toHex()
+            logger.info { "$doubleSpenderName had already redeemed their tokens" +
+                    " and continued spending them!" }
+
+            return
+        }
+
+        logger.info { "The double spending detection failed!" }
     }
 
     private fun signByVerifier(token: Token, lastVerifiedProof: ByteArray, recipient: ByteArray): RecipientPair {

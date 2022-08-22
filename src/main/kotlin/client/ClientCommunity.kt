@@ -45,6 +45,9 @@ class ClientCommunity : EuroCommunity() {
     }
 
     internal fun onEvaComplete(peer: Peer, info: String, id: String, data: ByteArray?) {
+        // TODO: Verify for fun that the received tokens are not already in possession
+        //  of this client.
+
         val receivedTokens = Token.deserialize(data!!)
 
         for (token in receivedTokens) {
@@ -72,14 +75,17 @@ class ClientCommunity : EuroCommunity() {
         logger.info { "New unverified balance: ${unverifiedTokens.size}" }
     }
 
-    internal fun sendToBank() {
+    internal fun sendToBank(doubleSpend: Boolean = false) {
         if (unverifiedTokens.isEmpty()) {
             logger.info { "There are no unverified tokens!" }
             return
         }
 
         send(verifierAddress, unverifiedTokens)
-        unverifiedTokens.clear()
+
+        if (!doubleSpend) {
+            unverifiedTokens.clear()
+        }
 
         logger.info { "Sent unverified tokens to a verifier!" }
     }

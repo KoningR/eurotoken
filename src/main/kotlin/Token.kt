@@ -4,6 +4,8 @@ import nl.tudelft.ipv8.keyvault.PrivateKey
 import kotlin.random.Random
 
 data class RecipientPair(val publicKey: ByteArray, val proof: ByteArray) {
+    private val name = hashCode().toString()
+
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (javaClass != other?.javaClass) return false
