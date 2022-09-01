@@ -9,11 +9,7 @@ const val DATA_SIZE = 100000000
 // The number of bytes of each part of the payload.
 const val SPLIT_SIZE = 1492
 
-// Values copied from the kotlin-ipv8 library.
-const val SIGN_PUBLICKEY_BYTES = 32
-const val SIGN_SECRETKEY_BYTES = 64
-const val SIGN_SEED_BYTES = 32
-const val SIGNATURE_SIZE = 64
+
 
 /**
  * Convert bytes per millisecond to megabytes per second.
