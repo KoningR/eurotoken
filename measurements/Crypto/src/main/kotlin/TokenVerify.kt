@@ -1,6 +1,7 @@
 import com.goterl.lazysodium.LazySodiumJava
 import com.goterl.lazysodium.SodiumJava
 import kotlinx.coroutines.*
+import java.io.File
 import java.lang.Exception
 import java.util.concurrent.Executors
 import kotlin.random.Random
@@ -20,7 +21,7 @@ private const val VALUE_SIZE = 1
 internal const val VERIFIER_PAYLOAD_SIZE = ID_SIZE + VALUE_SIZE + SIGNATURE_SIZE + SIGN_PUBLICKEY_BYTES
 internal const val CLIENT_PAYLOAD_SIZE = SIGNATURE_SIZE + SIGN_PUBLICKEY_BYTES
 
-private data class Token(
+internal data class Token(
     val verifierPayload: ByteArray,
     val verifierSignature: ByteArray,
     val clientPayload: ByteArray,
@@ -48,14 +49,16 @@ fun main() {
 
     // Warmup round.
     runBlocking {
-        verify(100, 100, numThreads)
+//        verify(100, 100, numThreads)
+        sign(100, 100, numThreads)
     }
 
     for (i in results.indices) {
-//        for (j in 1..numThreads) {
         for (j in numThreads downTo 1) {
+
             results[i][j - 1] = runBlocking {
-                verify(100, 100, j)
+//                verify(100, 100, j)
+                sign(100, 100, j)
             }
 
             println("Done with iteration $i $j.")
@@ -68,7 +71,7 @@ fun main() {
         resultString += longArray.joinToString(separator = ",", postfix = "\n")
     }
 
-//    File("Achievable Token Verification Throughput.csv").writeText(resultString)
+    File("Achievable Token Signing Throughput.csv").writeText(resultString)
 }
 
 /**
@@ -142,6 +145,66 @@ private suspend fun verify(tokensPerTask: Int, numTasks: Int, numThreads: Int): 
                             token.clientPayload.size, publicKeyClone)) {
                         throw Exception("Could not verify client signature!")
                     }
+                }
+            }
+
+        }
+    }
+
+    // Stop measuring.
+    val endTime = System.nanoTime()
+
+    threadPool.close()
+
+    return (1000000000.toDouble() / (endTime - startTime) * tokensPerTask * numTasks)
+}
+
+private suspend fun sign(tokensPerTask: Int, numTasks: Int, numThreads: Int): Double {
+    // Create seed and arrays.
+    val signSeed = Random.Default.nextBytes(SIGN_SEED_BYTES)
+    val publicKey = ByteArray(SIGN_PUBLICKEY_BYTES)
+    val secretKey = ByteArray(SIGN_SECRETKEY_BYTES)
+
+    // Generate keypair.
+    val lazySodium = LazySodiumJava(SodiumJava())
+    if (!lazySodium.cryptoSignSeedKeypair(publicKey, secretKey, signSeed)) {
+        throw Exception("Could not create keys!")
+    }
+
+    // Create a thread pool and define the maximum number of threads.
+    val threadPool = Executors.newFixedThreadPool(numThreads).asCoroutineDispatcher()
+
+    // Start measuring.
+    val startTime = System.nanoTime()
+
+    // Verify in parallel.
+    withContext(threadPool) {
+        repeat(numTasks) {
+
+            launch {
+                val secretKeyClone = secretKey.clone()
+
+                // One iteration of this loop corresponds to verifying one token.
+                repeat(tokensPerTask) {
+
+                    // Sign the verifier's payload.
+                    val verifierPayload = Random.Default.nextBytes(VERIFIER_PAYLOAD_SIZE)
+                    val verifierSignature = ByteArray(SIGNATURE_SIZE)
+
+                    if (!lazySodium.cryptoSignDetached(verifierSignature, verifierPayload,
+                            verifierPayload.size.toLong(), secretKeyClone)) {
+                        throw Exception("Could not sign verifier payload!")
+                    }
+
+                    // Sign the client's payload.
+                    val clientPayload = Random.Default.nextBytes(CLIENT_PAYLOAD_SIZE)
+                    val clientSignature = ByteArray(SIGNATURE_SIZE)
+
+                    if (!lazySodium.cryptoSignDetached(clientSignature, clientPayload,
+                            clientPayload.size.toLong(), secretKeyClone)) {
+                        throw Exception("Could not sign client payload!")
+                    }
+
                 }
             }
 
