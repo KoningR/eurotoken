@@ -1,6 +1,7 @@
 import mu.KotlinLogging
 import nl.tudelft.ipv8.keyvault.JavaCryptoProvider
 import nl.tudelft.ipv8.keyvault.PrivateKey
+import java.security.SecureRandom
 import kotlin.random.Random
 
 data class RecipientPair(val publicKey: ByteArray, val proof: ByteArray) {
@@ -106,6 +107,7 @@ class Token(
 
     companion object {
         private val logger = KotlinLogging.logger {}
+        private val secureRandom = SecureRandom()
 
         // TODO: Write a unit test to verify that these values are still correct.
         private const val ID_SIZE = 8
@@ -116,10 +118,16 @@ class Token(
         private const val TOKEN_CREATION_SIZE = ID_SIZE + VALUE_SIZE + PUBLIC_KEY_SIZE + SIGNATURE_SIZE
 
         internal fun create(value: Byte, verifier: ByteArray): Token {
-            return Token(Random.nextBytes(ID_SIZE),
+            val idBytes = ByteArray(ID_SIZE)
+            val signatureBytes = ByteArray(SIGNATURE_SIZE)
+
+            secureRandom.nextBytes(idBytes)
+            secureRandom.nextBytes(signatureBytes)
+
+            return Token(idBytes,
                 value,
                 verifier,
-                Random.nextBytes(SIGNATURE_SIZE),
+                signatureBytes,
                 mutableListOf())
         }
 
