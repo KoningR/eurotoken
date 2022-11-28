@@ -59,7 +59,7 @@ class StressApplication {
                 StressCommunity.MessageId.STRESS_MESSAGE,
                 payload,
                 sign = false,
-                encrypt = false,
+                encrypt = true,
                 recipient = recipient
             )
 

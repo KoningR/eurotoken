@@ -7,9 +7,10 @@ import nl.tudelft.ipv8.Overlay
 
 class EvaCommunity : Community() {
     override val serviceId = "381entirelyrandomcommunitystringa141279f"
+
     private val logger = KotlinLogging.logger {}
 
-    private var startTime = -1L
+    private val transactionTimer = mutableMapOf<String, Long>().withDefault { -1L }
 
     override fun getWalkableAddresses(): List<IPv4Address> {
         return listOf(
@@ -18,15 +19,21 @@ class EvaCommunity : Community() {
         )
     }
 
-    internal fun startTimer() {
-        if (startTime < 0) {
-            startTime = System.currentTimeMillis()
-            logger.info { "Start timing!" }
+    internal fun startTimer(id: String) {
+        val startTime = System.currentTimeMillis()
+
+        if (transactionTimer.getOrDefault(id, -1L) < 0) {
+            // using milliseconds is acceptable for measurements of this order.
+            transactionTimer[id] = startTime
+
+            logger.info { "Start timing for transaction $id!" }
         }
     }
 
-    internal fun stopTimer(totalBytes: Int) {
+    internal fun stopTimer(totalBytes: Int, id: String) {
         val now = System.currentTimeMillis()
+
+        val startTime = transactionTimer[id]!!
 
         logger.info { "Megabytes per second: ${throughputMbPerSecond(totalBytes, now - startTime)}" }
         logger.info { "Time since start: ${now - startTime}" }

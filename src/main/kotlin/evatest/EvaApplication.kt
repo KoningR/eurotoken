@@ -52,25 +52,34 @@ class EvaApplication {
             return
         }
 
+        // TODO: Change back to 10000000
         val testPayload = ByteArray(10000000)
         testPayload.fill(42)
 
         val recipient = evaCommunity.getPeers().first()
         // Both community and id are necessary.
-        evaCommunity.evaSendBinary(recipient, evaCommunity.serviceId, java.util.UUID.randomUUID().toString(), testPayload)
+
+        for (i in listOf(200, 400, 600, 800, 1000, 1200)) {
+        evaCommunity.evaProtocol!!.blockSize = i
+
+            for (j in listOf(10, 20, 40, 60, 80)) {
+                evaCommunity.evaProtocol!!.windowSize = j
+                evaCommunity.evaSendBinary(recipient, evaCommunity.serviceId, java.util.UUID.randomUUID().toString(), testPayload)
+            }
+         }
 
         logger.info { "Sent packets!" }
     }
 
     private fun onEvaProgress(peer: Peer, info: String, progress: TransferProgress) {
         if (progress.progress == 0.0) {
-            evaCommunity.startTimer()
+            evaCommunity.startTimer(progress.id)
         }
 
     }
 
     private fun onEvaComplete(peer: Peer, info: String, id: String, data: ByteArray?) {
-        evaCommunity.stopTimer(data!!.size)
+        evaCommunity.stopTimer(data!!.size, id)
     }
 
     private fun createEvaCommunity(): OverlayConfiguration<EvaCommunity> {
