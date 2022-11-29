@@ -10,6 +10,7 @@ import nl.tudelft.ipv8.Peer
 import nl.tudelft.ipv8.keyvault.JavaCryptoProvider
 import nl.tudelft.ipv8.messaging.EndpointAggregator
 import nl.tudelft.ipv8.messaging.eva.EVAProtocol
+import nl.tudelft.ipv8.messaging.eva.TransferException
 import nl.tudelft.ipv8.messaging.eva.TransferProgress
 import nl.tudelft.ipv8.messaging.udp.UdpEndpoint
 import nl.tudelft.ipv8.peerdiscovery.strategy.RandomWalk
@@ -40,6 +41,7 @@ class EvaApplication {
         evaCommunity.evaProtocol = EVAProtocol(evaCommunity, scope, retransmitInterval = 150L)
         evaCommunity.setOnEVAReceiveProgressCallback(::onEvaProgress)
         evaCommunity.setOnEVAReceiveCompleteCallback(::onEvaComplete)
+        evaCommunity.setOnEVAErrorCallback(::onEvaError)
     }
 
     fun printInfo(): Int {
@@ -52,21 +54,28 @@ class EvaApplication {
             return
         }
 
-        // TODO: Change back to 10000000
+        // Create a test payload of 10 megabytes.
+        // Ideally, we'd use 100mb like in all previous
+        // experiments, but some configurations are so
+        // slow that this is too cumbersome.
         val testPayload = ByteArray(10000000)
         testPayload.fill(42)
 
         val recipient = evaCommunity.getPeers().first()
-        // Both community and id are necessary.
 
-        for (i in listOf(200, 400, 600, 800, 1000, 1200)) {
-        evaCommunity.evaProtocol!!.blockSize = i
+        repeat(10) {
 
-            for (j in listOf(10, 20, 40, 60, 80)) {
-                evaCommunity.evaProtocol!!.windowSize = j
-                evaCommunity.evaSendBinary(recipient, evaCommunity.serviceId, java.util.UUID.randomUUID().toString(), testPayload)
+            // 1400 was not an option because the maximum allowed packet
+            // size is smaller than that.
+            for (i in listOf(200, 600, 1000, 1200)) {
+                evaCommunity.evaProtocol!!.blockSize = i
+
+                for (j in listOf(16, 32, 64, 128, 256)) {
+                    evaCommunity.evaProtocol!!.windowSize = j
+                    evaCommunity.evaSendBinary(recipient, evaCommunity.serviceId, java.util.UUID.randomUUID().toString(), testPayload)
+                }
             }
-         }
+        }
 
         logger.info { "Sent packets!" }
     }
@@ -80,6 +89,10 @@ class EvaApplication {
 
     private fun onEvaComplete(peer: Peer, info: String, id: String, data: ByteArray?) {
         evaCommunity.stopTimer(data!!.size, id)
+    }
+
+    private fun onEvaError(peer: Peer, transferException: TransferException) {
+        logger.info { "An error occurred: ${transferException.m}" }
     }
 
     private fun createEvaCommunity(): OverlayConfiguration<EvaCommunity> {

@@ -4,6 +4,7 @@ import mu.KotlinLogging
 import nl.tudelft.ipv8.Community
 import nl.tudelft.ipv8.IPv4Address
 import nl.tudelft.ipv8.Overlay
+import java.io.File
 
 class EvaCommunity : Community() {
     override val serviceId = "381entirelyrandomcommunitystringa141279f"
@@ -35,9 +36,12 @@ class EvaCommunity : Community() {
 
         val startTime = transactionTimer[id]!!
 
+        File("EVA Window Block Gridsearch No Encryption.csv").appendText("${throughputMbPerSecond(totalBytes, now - startTime)},")
+
         logger.info { "Megabytes per second: ${throughputMbPerSecond(totalBytes, now - startTime)}" }
         logger.info { "Time since start: ${now - startTime}" }
         logger.info { "Bytes received: $totalBytes" }
+        logger.info { "Current time: $now" }
     }
 
     private fun throughputMbPerSecond(bytes: Int, millis: Long): Double {
