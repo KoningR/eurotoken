@@ -1,93 +1,173 @@
 package verifier
 
 import EuroCommunity
+import RecipientPair
 import Token
-import client.ClientCommunity
-import nl.tudelft.ipv8.IPv4Address
 import nl.tudelft.ipv8.Overlay
 import nl.tudelft.ipv8.Peer
-import nl.tudelft.ipv8.messaging.Packet
-import java.net.DatagramPacket
-import java.net.DatagramSocket
-import kotlin.random.Random
+import nl.tudelft.ipv8.keyvault.JavaCryptoProvider
+import nl.tudelft.ipv8.util.toHex
 
 class VerifierCommunity : EuroCommunity() {
-    private val socket: DatagramSocket by lazy { endpoint.udpEndpoint!!.socket!! }
-
     private val tokens = mutableMapOf<TokenId, Token>()
-
-    init {
-        messageHandlers[ClientCommunity.EURO_CLIENT_MESSAGE.toInt()] = ::receive
-    }
 
     internal fun info() {
         logger.info { getPeers().size }
     }
 
     internal fun createAndSend(receiver: Peer, amount: Int) {
-        val newTokens = mutableListOf<Token>()
+        val newTokens = mutableSetOf<Token>()
 
         repeat(amount) {
-            val id = Random.nextBytes(Token.ID_SIZE)
-            val value: Byte = 0b1
-            val token = Token.create(id, value, myPublicKey,
-                receiver.publicKey.keyToBin(), myPrivateKey)
+            val token = Token.create(0b1, myPublicKey)
+            signByVerifier(token, token.genesisHash, receiver.publicKey.keyToBin())
 
-            tokens[TokenId(id)] = token
+            tokens[TokenId(token.id)] = token
+
             newTokens.add(token)
         }
 
-        send(receiver.address.toSocketAddress(), newTokens)
+        send(receiver, newTokens)
 
-        logger.info { "Create $amount new tokens!" }
+        logger.info { "Created $amount new tokens!" }
     }
 
-    private fun receive(packet: Packet) {
-        val receivedTokens = Token.deserialize(packet)
-        val verifiedTokens = mutableListOf<Token>()
+    internal fun onEvaComplete(peer: Peer, info: String, id: String, data: ByteArray?) {
 
-        val iter = receivedTokens.iterator()
-        while (iter.hasNext()) {
-            val receivedToken = iter.next()
+        // TODO: Encrypt the entire history with the verifier's public key
+        //  such that individuals cannot see it and privacy is maintained better?
+        //  Also this removes the need to chain hashes because simple integer counters
+        //  can then be used.
 
-            if (!receivedToken.verifySenderSignature()) {
-                logger.info { "Received a token that was not signed by its proclaimed sender!" }
-                iter.remove()
+        // TODO: What if person keeps paying with the unverified version of a token
+        //  after having it verified?
+
+        // TODO: Add a mechanism to ensure parties really try to verify tokens for themselves.
+        //  Currently it is possible to cut a token in half and redeem/verify money for someone else.
+        //  This makes it so people can flag others as double spenders.
+
+        // TODO: How to deal with sequential double spends?
+
+        // TODO: Although replay attacks will be detected by the verifier, individual
+        //  clients currently still accept tokens they have already received.
+        //  Upon validating these tokens, they are rejected, the victim is blamed for
+        //  the replay attack and the original attacked cannot be detected.
+
+        val receivedTokens = Token.deserialize(data!!)
+        val verifiedTokens = mutableSetOf<Token>()
+
+        for (receivedToken in receivedTokens) {
+            if (receivedToken.numRecipients == 1) {
+                logger.info { "Token is already verified!" }
                 continue
             }
 
-            val oldToken = tokens[TokenId(receivedToken.id)]
-            if (oldToken == null) {
-                logger.info { "Received a token ID that does not exist!" }
-                iter.remove()
+            if (!(myPublicKey contentEquals receivedToken.verifier)) {
+                logger.info { "Token was not signed by this verifier!" }
                 continue
             }
 
-            if (oldToken.value != receivedToken.value) {
-                logger.info { "Received a token with a differing value!" }
-                iter.remove()
+            val verifiedToken = tokens[TokenId(receivedToken.id)]
+            if (verifiedToken == null) {
+                logger.info { "Token ID does not exist!" }
                 continue
             }
 
-            if (!(oldToken.receiver contentEquals receivedToken.sender)) {
-                logger.info { "Received a token that was not signed by its owner!" }
-                iter.remove()
+            if (verifiedToken.value != receivedToken.value) {
+                logger.info { "Token has been given a different value!" }
                 continue
             }
 
-            // Update the last known entry of the token.
-            oldToken.receiver = receivedToken.receiver
-            oldToken.sign(myPrivateKey)
+            if (!receivedToken.verifyRecipients(myPublicKey)) {
+                continue
+            }
 
-            verifiedTokens.add(oldToken)
+            val lastVerifiedProof = verifiedToken.lastProof
+
+            if (!(lastVerifiedProof contentEquals receivedToken.firstProof)) {
+                findDoubleSpend(receivedToken, verifiedToken)
+
+                continue
+            }
+
+            verifiedToken.recipients.addAll(receivedToken.recipients.subList(1, receivedToken.numRecipients))
+
+            val lastRecipient = receivedToken.lastRecipient
+            val lastProof = receivedToken.lastProof
+
+            val newRecipientPair = signByVerifier(receivedToken, lastProof, lastRecipient)
+            verifiedToken.recipients.add(newRecipientPair)
+
+            verifiedTokens.add(receivedToken)
         }
 
-        Token.serialize(verifiedTokens, packet.data)
-        socket.send(DatagramPacket(packet.data, 0,
-            EURO_IPV8_PREFIX_SIZE + verifiedTokens.size * Token.ID_SIZE,
-            (packet.source as IPv4Address).toSocketAddress()))
+        logger.info { "Received ${verifiedTokens.size} valid tokens and verified them!" }
 
-        logger.info { "Received ${verifiedTokens.size} tokens and verified them!" }
+        send(peer, verifiedTokens)
+    }
+
+    private fun findDoubleSpend(receivedToken: Token, verifiedToken: Token) {
+
+        val receivedFirstProof = receivedToken.firstProof
+
+        // The first proof of the received token must exist somewhere in the history
+        // of the verified token. This is because we have already verified the token's
+        // proof chain, which requires that its first proof is signed by the verifier itself.
+        // Therefore, the verifier must have a record of it.
+        // It is also not possible for indexOfReceivedProof to point
+        // to the last element in the list. If it were, then the first
+        // proof of the received token would be equal to the last proof
+        // of the verified token, which only happens when there is no
+        // double spending or when it cannot yet be detected. Thus, this
+        // function would have never been called.
+        var indexOfReceivedProof = 0
+        for ((i, recipientPair) in verifiedToken.recipients.withIndex()) {
+            if (recipientPair.proof contentEquals receivedFirstProof) {
+                indexOfReceivedProof = i
+                break
+            }
+        }
+
+        val historySinceReceivedProof = verifiedToken.recipients.subList(
+            indexOfReceivedProof,
+            verifiedToken.numRecipients)
+
+        // In the first iteration of this loop, the compared pair will always
+        // be identical.
+        var doubleSpender = receivedToken.firstRecipient
+        for (pair in (receivedToken.recipients zip historySinceReceivedProof)) {
+            if (pair.first.proof contentEquals pair.second.proof) {
+                doubleSpender = pair.first.publicKey
+            } else {
+                val doubleSpenderName = JavaCryptoProvider.keyFromPublicBin(doubleSpender).keyToHash().toHex()
+                logger.info { "$doubleSpenderName attempted to double spend!" }
+
+                return
+            }
+        }
+
+        if (receivedToken.numRecipients != historySinceReceivedProof.size) {
+            val doubleSpenderName = JavaCryptoProvider.keyFromPublicBin(doubleSpender).keyToHash().toHex()
+            logger.info { "$doubleSpenderName had already redeemed their tokens" +
+                    " and continued spending them!" }
+
+            return
+        }
+
+        logger.info { "The double spending detection failed!" }
+    }
+
+    private fun signByVerifier(token: Token, lastVerifiedProof: ByteArray, recipient: ByteArray): RecipientPair {
+        val newRecipientPair = RecipientPair(
+            recipient,
+            myPrivateKey.sign(token.id + token.value + lastVerifiedProof + recipient)
+        )
+
+        token.genesisHash = lastVerifiedProof
+        token.recipients.clear()
+        token.recipients.add(newRecipientPair)
+
+        return newRecipientPair
     }
 
     class Factory : Overlay.Factory<VerifierCommunity>(VerifierCommunity::class.java) {

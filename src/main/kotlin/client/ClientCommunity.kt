@@ -4,7 +4,6 @@ import EuroCommunity
 import Token
 import nl.tudelft.ipv8.Overlay
 import nl.tudelft.ipv8.Peer
-import nl.tudelft.ipv8.messaging.Packet
 import verifier.Verifier
 
 class ClientCommunity : EuroCommunity() {
@@ -14,38 +13,81 @@ class ClientCommunity : EuroCommunity() {
     private val unverifiedTokens: MutableSet<Token> = mutableSetOf()
     private val verifiedTokens: MutableSet<Token> = mutableSetOf()
 
-    init {
-        messageHandlers[EURO_CLIENT_MESSAGE.toInt()] = ::receive
-    }
-
     internal fun info() {
         logger.info { getPeers().size }
     }
 
-    internal fun sendToPeer(receiver: Peer, amount: Int) {
-        if (verifiedTokens.size < amount) {
+    internal fun sendToPeer(receiver: Peer, amount: Int, verified: Boolean, doubleSpend: Boolean = false) {
+        val tokens =  if (verified) verifiedTokens else unverifiedTokens
+
+        if (tokens.size < amount) {
             logger.info { "Insufficient balance!" }
             return
         }
 
-        val tokensToSend = verifiedTokens.take(amount).toMutableList()
+        val tokensToSend = tokens.take(amount).toMutableSet()
         for (token in tokensToSend) {
-            token.sender = myPublicKey
-            token.receiver = receiver.publicKey.keyToBin()
-            token.sign(myPrivateKey)
+            token.signByPeer(receiver.publicKey.keyToBin(), myPrivateKey)
         }
 
-        verifiedTokens.removeAll(tokensToSend)
+        send(receiver, tokensToSend)
 
-        send(receiver.address.toSocketAddress(), tokensToSend)
+        if (doubleSpend) {
+            tokensToSend.forEach {
+                it.recipients.removeLast()
+            }
+        } else {
+            tokens.removeAll(tokensToSend)
+        }
 
         logger.info { "New verified balance: ${verifiedTokens.size}" }
         logger.info { "New unverified balance: ${unverifiedTokens.size}" }
     }
 
-    private fun sendToBank() {
-        // TODO: Calls to toSocketAddress() might be very slow.
-        send(verifierAddress.address.toSocketAddress(), unverifiedTokens)
+    internal fun onEvaComplete(peer: Peer, info: String, id: String, data: ByteArray?) {
+        // TODO: Verify for fun that the received tokens are not already in possession
+        //  of this client.
+
+        val receivedTokens = Token.deserialize(data!!)
+
+        for (token in receivedTokens) {
+
+            if (!(token.recipients.last().publicKey contentEquals myPublicKey)) {
+                logger.info { "Received a token that was meant for someone else!" }
+                continue
+            }
+
+            if (!token.verifyRecipients(verifierKey)) {
+                continue
+            }
+
+            // If the token is completely verified and it has 1 recipient, namely this object,
+            // then it must have been sent directly from a verifier and is therefore a verified
+            // token.
+            if (token.numRecipients == 1) {
+                verifiedTokens.add(token)
+            } else {
+                unverifiedTokens.add(token)
+            }
+        }
+
+        logger.info { "New verified balance: ${verifiedTokens.size}" }
+        logger.info { "New unverified balance: ${unverifiedTokens.size}" }
+    }
+
+    internal fun sendToBank(doubleSpend: Boolean = false) {
+        if (unverifiedTokens.isEmpty()) {
+            logger.info { "There are no unverified tokens!" }
+            return
+        }
+
+        send(verifierAddress, unverifiedTokens)
+
+        if (!doubleSpend) {
+            unverifiedTokens.clear()
+        }
+
+        logger.info { "Sent unverified tokens to a verifier!" }
     }
 
     private fun getVerifier(): Peer? {
@@ -60,37 +102,6 @@ class ClientCommunity : EuroCommunity() {
         }
 
         return null
-    }
-
-    private fun receive(packet: Packet) {
-        val receivedTokens = Token.deserialize(packet)
-        for (token in receivedTokens) {
-
-            if (!(token.receiver contentEquals myPublicKey)) {
-                logger.info { "Received a token that was meant for someone else!" }
-                continue
-            }
-
-            if (!token.verifySenderSignature()) {
-                logger.info { "Received a token that was not signed by its proclaimed sender!" }
-                continue
-            }
-
-            if (token.sender contentEquals verifierKey) {
-                verifiedTokens.add(token)
-            } else {
-                unverifiedTokens.add(token)
-            }
-        }
-
-        logger.info { "New verified balance: ${verifiedTokens.size}" }
-        logger.info { "New unverified balance: ${unverifiedTokens.size}" }
-
-        sendToBank()
-    }
-
-    companion object MessageId {
-        const val EURO_CLIENT_MESSAGE: Byte = 0b111
     }
 
     class Factory : Overlay.Factory<ClientCommunity>(ClientCommunity::class.java) {

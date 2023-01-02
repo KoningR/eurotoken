@@ -8,11 +8,10 @@ import nl.tudelft.ipv8.messaging.Packet
 import kotlin.math.ceil
 
 class StressCommunity : Community() {
+
     override val serviceId = "381a9685c1912a141279f8222193db58u9c5duck"
     private val logger = KotlinLogging.logger {}
 
-    // 100 megabytes split over the size of the payload.
-    private val measureWindow = ceil((1e+8 / StressPayload.TEST_PAYLOAD.size)).toInt()
     private var startTime = -1L
     private var received = 0
 
@@ -28,7 +27,7 @@ class StressCommunity : Community() {
     }
 
     private fun onStressMessage(packet: Packet) {
-        val now = System.currentTimeMillis()
+        val now = System.nanoTime()
 
         if (startTime < 0) {
             startTime = now
@@ -36,25 +35,32 @@ class StressCommunity : Community() {
 
         received += 1
 
-        if (received == measureWindow) {
-            val receivedBytes = measureWindow * StressPayload.TEST_PAYLOAD.size
-            val passedTime = now - startTime
+        if (received == NUM_PACKETS_MEASURED) {
+            val duration = now - startTime
 
-            logger.info { "Throughput in megabytes per second: ${throughputMbPerSecond(receivedBytes, passedTime)}" }
-            logger.info { "Time since start: $passedTime" }
+            // This will be almost exactly 100 megabytes in bytes.
+            val receivedBytes = NUM_PACKETS_MEASURED * StressPayload.TEST_PAYLOAD.size
+
+            logger.info { "Throughput in megabytes per second: ${throughputMbPerSecond(receivedBytes, duration)}" }
+            logger.info { "Duration in nanoseconds: $duration" }
             logger.info { "Bytes received: $receivedBytes" }
         }
     }
 
-    private fun throughputMbPerSecond(bytes: Int, millis: Long): Double {
-        return (bytes.toDouble() / 1000000) / (millis.toDouble() / 1000)
+    private fun throughputMbPerSecond(bytes: Int, nanos: Long): Double {
+        return (bytes.toDouble() / 1000000) / (nanos.toDouble() / 1000000000)
+    }
+
+    companion object {
+        // 100 megabytes split over the size of the payload.
+        internal val NUM_PACKETS_MEASURED = ceil((1e+8 / StressPayload.TEST_PAYLOAD.size)).toInt()
     }
 
     object MessageId {
         const val STRESS_MESSAGE = 1
     }
 
-    class Factory() : Overlay.Factory<StressCommunity>(StressCommunity::class.java) {
+    class Factory : Overlay.Factory<StressCommunity>(StressCommunity::class.java) {
         override fun create(): StressCommunity {
             return StressCommunity()
         }

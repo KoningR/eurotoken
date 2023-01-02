@@ -12,7 +12,6 @@ import nl.tudelft.ipv8.messaging.EndpointAggregator
 import nl.tudelft.ipv8.messaging.udp.UdpEndpoint
 import nl.tudelft.ipv8.peerdiscovery.strategy.RandomWalk
 import java.net.InetAddress
-import kotlin.math.ceil
 
 class StressApplication {
     private val logger = KotlinLogging.logger {}
@@ -50,13 +49,16 @@ class StressApplication {
 
         val recipient = stressCommunity.getPeers().first()
 
-        repeat(ceil((1e+8 / StressPayload.TEST_PAYLOAD.size)).toInt() * 3) {
+        // Because we don't use any acknowledgement protocol for this
+        // measurement, we expect a huge packet loss and therefore send
+        // many more packets than we need to measure.
+        repeat(StressCommunity.NUM_PACKETS_MEASURED * 3) {
 
             val payload = StressPayload()
             val packet = stressCommunity.serializePacket(
                 StressCommunity.MessageId.STRESS_MESSAGE,
                 payload,
-                sign = true,
+                sign = false,
                 encrypt = true,
                 recipient = recipient
             )
