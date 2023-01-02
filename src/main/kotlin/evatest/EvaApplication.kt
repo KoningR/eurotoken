@@ -42,6 +42,11 @@ class EvaApplication {
         evaCommunity.setOnEVAReceiveProgressCallback(::onEvaProgress)
         evaCommunity.setOnEVAReceiveCompleteCallback(::onEvaComplete)
         evaCommunity.setOnEVAErrorCallback(::onEvaError)
+
+//        evaCommunity.endpoint.udpEndpoint?.socket?.sendBufferSize = 1
+//        evaCommunity.endpoint.udpEndpoint?.socket?.receiveBufferSize = 1
+        logger.info { "Send buffer: ${evaCommunity.endpoint.udpEndpoint?.socket?.sendBufferSize}" }
+        logger.info { "Receive buffer: ${evaCommunity.endpoint.udpEndpoint?.socket?.receiveBufferSize}" }
     }
 
     fun printInfo(): Int {
@@ -88,7 +93,7 @@ class EvaApplication {
     }
 
     private fun onEvaComplete(peer: Peer, info: String, id: String, data: ByteArray?) {
-        evaCommunity.stopTimer(data!!.size, id)
+        evaCommunity.stopTimer(info.toInt(), data!!.size, id)
     }
 
     private fun onEvaError(peer: Peer, transferException: TransferException) {

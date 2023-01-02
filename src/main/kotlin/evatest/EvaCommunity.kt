@@ -31,17 +31,21 @@ class EvaCommunity : Community() {
         }
     }
 
-    internal fun stopTimer(totalBytes: Int, id: String) {
+    internal fun stopTimer(numLostPackets:Int, totalBytes: Int, id: String) {
         val now = System.currentTimeMillis()
 
         val startTime = transactionTimer[id]!!
 
-        File("EVA Window Block Gridsearch No Encryption.csv").appendText("${throughputMbPerSecond(totalBytes, now - startTime)},")
+        File("EVA Window Block Gridsearch Yes Encryption.csv")
+            .appendText("${throughputMbPerSecond(totalBytes, now - startTime)},")
+        File("EVA Window Block Gridsearch Packets Lost.csv")
+            .appendText("$numLostPackets,")
 
         logger.info { "Megabytes per second: ${throughputMbPerSecond(totalBytes, now - startTime)}" }
         logger.info { "Time since start: ${now - startTime}" }
         logger.info { "Bytes received: $totalBytes" }
         logger.info { "Current time: $now" }
+        logger.info { "Number of lost packets: $numLostPackets" }
     }
 
     private fun throughputMbPerSecond(bytes: Int, millis: Long): Double {
