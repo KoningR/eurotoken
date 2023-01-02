@@ -81,8 +81,6 @@ class EvaApplication {
                 }
             }
         }
-
-        logger.info { "Sent packets!" }
     }
 
     private fun onEvaProgress(peer: Peer, info: String, progress: TransferProgress) {
