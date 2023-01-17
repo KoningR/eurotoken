@@ -41,7 +41,7 @@ internal data class Token(
  */
 fun main() {
     val numThreads = 8
-    val numRepetitions = 20
+    val numRepetitions = 10
 
     val results = Array(numRepetitions) {
         DoubleArray(numThreads)
@@ -53,9 +53,12 @@ fun main() {
         sign(100, 100, numThreads)
     }
 
+    // Loop for every repetition.
     for (i in results.indices) {
         for (j in numThreads downTo 1) {
 
+            // Execute each operation in this block sequentially
+            // with the runBlocking{} keyword.
             results[i][j - 1] = runBlocking {
 //                verify(100, 100, j)
                 sign(100, 100, j)
@@ -188,7 +191,7 @@ private suspend fun sign(tokensPerTask: Int, numTasks: Int, numThreads: Int): Do
                 repeat(tokensPerTask) {
 
                     // Sign the verifier's payload.
-                    val verifierPayload = Random.Default.nextBytes(VERIFIER_PAYLOAD_SIZE)
+                    val verifierPayload = ByteArray(VERIFIER_PAYLOAD_SIZE)
                     val verifierSignature = ByteArray(SIGNATURE_SIZE)
 
                     if (!lazySodium.cryptoSignDetached(verifierSignature, verifierPayload,
@@ -197,7 +200,7 @@ private suspend fun sign(tokensPerTask: Int, numTasks: Int, numThreads: Int): Do
                     }
 
                     // Sign the client's payload.
-                    val clientPayload = Random.Default.nextBytes(CLIENT_PAYLOAD_SIZE)
+                    val clientPayload = ByteArray(CLIENT_PAYLOAD_SIZE)
                     val clientSignature = ByteArray(SIGNATURE_SIZE)
 
                     if (!lazySodium.cryptoSignDetached(clientSignature, clientPayload,
