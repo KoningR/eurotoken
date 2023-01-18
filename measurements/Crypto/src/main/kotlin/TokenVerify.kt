@@ -41,7 +41,7 @@ internal data class Token(
  */
 fun main() {
     val numThreads = 8
-    val numRepetitions = 10
+    val numRepetitions = 100
 
     val results = Array(numRepetitions) {
         DoubleArray(numThreads)
@@ -49,8 +49,8 @@ fun main() {
 
     // Warmup round.
     runBlocking {
-//        verify(100, 100, numThreads)
-        sign(100, 100, numThreads)
+        verify(1000, 100, numThreads)
+//        sign(1000, 100, numThreads)
     }
 
     // Loop for every repetition.
@@ -60,8 +60,8 @@ fun main() {
             // Execute each operation in this block sequentially
             // with the runBlocking{} keyword.
             results[i][j - 1] = runBlocking {
-//                verify(100, 100, j)
-                sign(100, 100, j)
+                verify(1000, 100, j)
+//                sign(1000, 100, j)
             }
 
             println("Done with iteration $i $j.")
@@ -74,7 +74,7 @@ fun main() {
         resultString += longArray.joinToString(separator = ",", postfix = "\n")
     }
 
-    File("Achievable Token Signing Throughput.csv").writeText(resultString)
+    File("Achievable Token Verification Throughput.csv").writeText(resultString)
 }
 
 /**
