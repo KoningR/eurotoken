@@ -1,8 +1,16 @@
 import com.goterl.lazysodium.LazySodiumJava
 import com.goterl.lazysodium.SodiumJava
 import kotlinx.coroutines.*
+import net.i2p.crypto.eddsa.EdDSAEngine
+import net.i2p.crypto.eddsa.KeyPairGenerator
+import org.bouncycastle.crypto.generators.Ed25519KeyPairGenerator
+import org.bouncycastle.crypto.params.Ed25519KeyGenerationParameters
+import org.bouncycastle.crypto.params.Ed25519PrivateKeyParameters
+import org.bouncycastle.crypto.params.Ed25519PublicKeyParameters
+import org.bouncycastle.crypto.signers.Ed25519Signer
 import java.io.File
 import java.lang.Exception
+import java.security.SecureRandom
 import java.util.concurrent.Executors
 import kotlin.random.Random
 
@@ -28,6 +36,107 @@ internal data class Token(
     val clientSignature: ByteArray
 )
 
+private class Crypto {
+    enum class ALGORITHM {
+        LIBSODIUM, BOUNCY_CASTLE, I2P
+    }
+
+    companion object {
+        private val algorithm = ALGORITHM.LIBSODIUM
+
+        // Seed and arrays for Libsodium.
+        val naclSignSeed = Random.nextBytes(SIGN_SEED_BYTES)
+        val naclPublicKey = ByteArray(SIGN_PUBLICKEY_BYTES)
+        val naclSecretKey = ByteArray(SIGN_SECRETKEY_BYTES)
+        val lazySodium = LazySodiumJava(SodiumJava())
+
+        // Signer and verifier for BouncyCastle.
+        val bouncySigner: Ed25519Signer
+        val bouncyVerifier: Ed25519Signer
+
+        val i2pSigner: EdDSAEngine
+        val i2pVerifier: EdDSAEngine
+
+        init {
+            // Generate keypair for Libsodium.
+            if (!lazySodium.cryptoSignSeedKeypair(naclPublicKey, naclSecretKey, naclSignSeed)) {
+                throw Exception("Could not create keys!")
+            }
+
+            // Generate keypair for BouncyCastle.
+            // Note that the bit-lengths between the two APIs vary:
+            // https://crypto.stackexchange.com/questions/54353/
+            // why-are-nacl-secret-keys-64-bytes-for-signing-but-32-bytes-for-box/54367#54367
+            val kpg = Ed25519KeyPairGenerator()
+            kpg.init(Ed25519KeyGenerationParameters(SecureRandom()))
+            val kp = kpg.generateKeyPair()
+            val bouncyPublicKey = kp.public as Ed25519PublicKeyParameters
+            val bouncySecretKey = kp.private as Ed25519PrivateKeyParameters
+
+            // Initialize signer and verifier objects for Bouncy Castle.
+            bouncySigner = Ed25519Signer()
+            bouncySigner.init(true, bouncySecretKey)
+
+            bouncyVerifier = Ed25519Signer()
+            bouncyVerifier.init(false, bouncyPublicKey)
+
+            // Generate keypair for I2P.
+            val i2pKpg = KeyPairGenerator()
+            val i2pKp = i2pKpg.generateKeyPair()
+            i2pSigner = EdDSAEngine()
+            i2pSigner.initSign(i2pKp.private)
+            i2pVerifier = EdDSAEngine()
+            i2pVerifier.initVerify(i2pKp.public)
+        }
+
+        fun sign(payload: ByteArray): ByteArray {
+            when (algorithm) {
+                ALGORITHM.LIBSODIUM -> {
+                    val signature = ByteArray(SIGNATURE_SIZE)
+                    lazySodium.cryptoSignDetached(signature, payload,
+                        payload.size.toLong(), naclSecretKey)
+
+                    return signature
+                }
+
+                ALGORITHM.I2P -> {
+                    return i2pSigner.signOneShot(payload)
+
+                }
+
+                ALGORITHM.BOUNCY_CASTLE -> {
+                    bouncySigner.update(payload, 0, payload.size)
+                    val signature = bouncySigner.generateSignature()
+                    bouncySigner.reset()
+
+                    return signature
+                }
+            }
+        }
+
+        fun verify(signature: ByteArray, payload: ByteArray): Boolean {
+            when(algorithm) {
+                ALGORITHM.LIBSODIUM -> {
+                    return lazySodium.cryptoSignVerifyDetached(signature, payload,
+                        payload.size, naclPublicKey)
+                }
+
+                ALGORITHM.I2P -> {
+                    return i2pVerifier.verifyOneShot(payload, signature)
+                }
+
+                ALGORITHM.BOUNCY_CASTLE -> {
+                    bouncyVerifier.update(payload, 0, payload.size)
+                    val ok = bouncyVerifier.verifySignature(signature)
+                    bouncySigner.reset()
+
+                    return ok
+                }
+            }
+        }
+    }
+}
+
 /**
  * This script measures the throughput of verifying the same cryptographic
  * material as found in 1 Eurotoken (assuming an online setting). The
@@ -40,8 +149,8 @@ internal data class Token(
  * Eurotoken and kotlin-ipv8 as well.
  */
 fun main() {
-    val numThreads = 8
-    val numRepetitions = 100
+    val numThreads = 1
+    val numRepetitions = 10
 
     val results = Array(numRepetitions) {
         DoubleArray(numThreads)
@@ -49,8 +158,8 @@ fun main() {
 
     // Warmup round.
     runBlocking {
-        verify(1000, 100, numThreads)
-//        sign(1000, 100, numThreads)
+//        measureVerify(1000, 100, numThreads)
+        measureSign(1000, 100, numThreads)
     }
 
     // Loop for every repetition.
@@ -60,8 +169,8 @@ fun main() {
             // Execute each operation in this block sequentially
             // with the runBlocking{} keyword.
             results[i][j - 1] = runBlocking {
-                verify(1000, 100, j)
-//                sign(1000, 100, j)
+//                measureVerify(1000, 100, j)
+                measureSign(1000, 100, j)
             }
 
             println("Done with iteration $i $j.")
@@ -84,38 +193,17 @@ fun main() {
  * @param numThreads The number of threads on which the batches will be scheduled.
  * @return The number of tokens verified per second.
  */
-private suspend fun verify(tokensPerTask: Int, numTasks: Int, numThreads: Int): Double {
-    // Create seed and arrays.
-    val signSeed = Random.Default.nextBytes(SIGN_SEED_BYTES)
-    val publicKey = ByteArray(SIGN_PUBLICKEY_BYTES)
-    val secretKey = ByteArray(SIGN_SECRETKEY_BYTES)
-
-    // Generate keypair.
-    val lazySodium = LazySodiumJava(SodiumJava())
-    if (!lazySodium.cryptoSignSeedKeypair(publicKey, secretKey, signSeed)) {
-        throw Exception("Could not create keys!")
-    }
-
+private suspend fun measureVerify(tokensPerTask: Int, numTasks: Int, numThreads: Int): Double {
     // Create the array of 'tokens'.
     val tokenArray = Array(numTasks) {
 
         // Sign the verifier's payload.
         val verifierPayload = Random.Default.nextBytes(VERIFIER_PAYLOAD_SIZE)
-        val verifierSignature = ByteArray(SIGNATURE_SIZE)
-
-        if (!lazySodium.cryptoSignDetached(verifierSignature, verifierPayload,
-                verifierPayload.size.toLong(), secretKey)) {
-            throw Exception("Could not sign verifier payload!")
-        }
+        val verifierSignature = Crypto.sign(verifierPayload)
 
         // Sign the client's payload.
         val clientPayload = Random.Default.nextBytes(CLIENT_PAYLOAD_SIZE)
-        val clientSignature = ByteArray(SIGNATURE_SIZE)
-
-        if (!lazySodium.cryptoSignDetached(clientSignature, clientPayload,
-                clientPayload.size.toLong(), secretKey)) {
-            throw Exception("Could not sign client payload!")
-        }
+        val clientSignature = Crypto.sign(clientPayload)
 
         Token(verifierPayload, verifierSignature, clientPayload, clientSignature)
     }
@@ -132,20 +220,17 @@ private suspend fun verify(tokensPerTask: Int, numTasks: Int, numThreads: Int): 
 
             launch {
                 val token = tokenArray[it]
-                val publicKeyClone = publicKey.clone()
 
                 // One iteration of this loop corresponds to verifying one token.
                 repeat(tokensPerTask) {
 
                     // Verify verifier signature.
-                    if (!lazySodium.cryptoSignVerifyDetached(token.verifierSignature, token.verifierPayload,
-                            token.verifierPayload.size, publicKeyClone)) {
+                    if (!Crypto.verify(token.verifierSignature, token.verifierPayload)) {
                         throw Exception("Could not verify verifier signature!")
                     }
 
                     // Verify client signature.
-                    if (!lazySodium.cryptoSignVerifyDetached(token.clientSignature, token.clientPayload,
-                            token.clientPayload.size, publicKeyClone)) {
+                    if (!Crypto.verify(token.clientSignature, token.clientPayload)) {
                         throw Exception("Could not verify client signature!")
                     }
                 }
@@ -162,18 +247,7 @@ private suspend fun verify(tokensPerTask: Int, numTasks: Int, numThreads: Int): 
     return (1000000000.toDouble() / (endTime - startTime) * tokensPerTask * numTasks)
 }
 
-private suspend fun sign(tokensPerTask: Int, numTasks: Int, numThreads: Int): Double {
-    // Create seed and arrays.
-    val signSeed = Random.Default.nextBytes(SIGN_SEED_BYTES)
-    val publicKey = ByteArray(SIGN_PUBLICKEY_BYTES)
-    val secretKey = ByteArray(SIGN_SECRETKEY_BYTES)
-
-    // Generate keypair.
-    val lazySodium = LazySodiumJava(SodiumJava())
-    if (!lazySodium.cryptoSignSeedKeypair(publicKey, secretKey, signSeed)) {
-        throw Exception("Could not create keys!")
-    }
-
+private suspend fun measureSign(tokensPerTask: Int, numTasks: Int, numThreads: Int): Double {
     // Create a thread pool and define the maximum number of threads.
     val threadPool = Executors.newFixedThreadPool(numThreads).asCoroutineDispatcher()
 
@@ -185,29 +259,16 @@ private suspend fun sign(tokensPerTask: Int, numTasks: Int, numThreads: Int): Do
         repeat(numTasks) {
 
             launch {
-                val secretKeyClone = secretKey.clone()
-
                 // One iteration of this loop corresponds to verifying one token.
                 repeat(tokensPerTask) {
 
                     // Sign the verifier's payload.
                     val verifierPayload = ByteArray(VERIFIER_PAYLOAD_SIZE)
-                    val verifierSignature = ByteArray(SIGNATURE_SIZE)
-
-                    if (!lazySodium.cryptoSignDetached(verifierSignature, verifierPayload,
-                            verifierPayload.size.toLong(), secretKeyClone)) {
-                        throw Exception("Could not sign verifier payload!")
-                    }
+                    val verifierSignature = Crypto.sign(verifierPayload)
 
                     // Sign the client's payload.
                     val clientPayload = ByteArray(CLIENT_PAYLOAD_SIZE)
-                    val clientSignature = ByteArray(SIGNATURE_SIZE)
-
-                    if (!lazySodium.cryptoSignDetached(clientSignature, clientPayload,
-                            clientPayload.size.toLong(), secretKeyClone)) {
-                        throw Exception("Could not sign client payload!")
-                    }
-
+                    val clientSignature = Crypto.sign(clientPayload)
                 }
             }
 

@@ -17,6 +17,10 @@ dependencies {
     implementation "com.goterl:lazysodium-java:5.0.1"
     implementation "net.java.dev.jna:jna:5.5.0"
 
+    implementation group: "org.bouncycastle", name: "bcprov-jdk15to18", version: "1.63"
+    implementation group: 'net.i2p.crypto', name: 'eddsa', version: '0.3.0'
+
+
     testImplementation 'org.jetbrains.kotlin:kotlin-test:1.6.0'
 }
 
