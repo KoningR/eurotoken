@@ -20,14 +20,24 @@ internal const val SIGN_PUBLICKEY_BYTES = 32
 internal const val SIGN_SECRETKEY_BYTES = 64
 internal const val SIGNATURE_SIZE = 64
 
+// Clients are identified by their entire public key
+// of 74 bytes; this key consists of a public key
+// for encryption (32 bytes), a public key for
+// signatures (32 bytes), and a prefix (10 bytes).
+internal const val ENTIRE_PUBLICKEY_BYTES = 74
+
 // Values copied from the Eurotoken library.
 private const val ID_SIZE = 8
 private const val VALUE_SIZE = 1
+private const val NONCE_SIZE = 64
 
 // The payloads are of the same size as the payloads verified in
 // the Eurotoken library.
-internal const val VERIFIER_PAYLOAD_SIZE = ID_SIZE + VALUE_SIZE + SIGNATURE_SIZE + SIGN_PUBLICKEY_BYTES
-internal const val CLIENT_PAYLOAD_SIZE = SIGNATURE_SIZE + SIGN_PUBLICKEY_BYTES
+//internal const val VERIFIER_PAYLOAD_SIZE = ID_SIZE + VALUE_SIZE + SIGNATURE_SIZE + SIGN_PUBLICKEY_BYTES
+//internal const val CLIENT_PAYLOAD_SIZE = SIGNATURE_SIZE + SIGN_PUBLICKEY_BYTES
+
+private const val AUTHORITY_SIGNATURE_PAYLOAD = ID_SIZE + VALUE_SIZE + NONCE_SIZE + ENTIRE_PUBLICKEY_BYTES
+private const val CLIENT_SIGNATURE_PAYLOAD = SIGNATURE_SIZE + ENTIRE_PUBLICKEY_BYTES
 
 internal data class Token(
     val verifierPayload: ByteArray,
@@ -36,12 +46,13 @@ internal data class Token(
     val clientSignature: ByteArray
 )
 
-private class Crypto {
+internal class Crypto {
     enum class ALGORITHM {
         LIBSODIUM, BOUNCY_CASTLE, I2P
     }
 
     companion object {
+        // Set which API will be used for ed25519.
         private val algorithm = ALGORITHM.LIBSODIUM
 
         // Seed and arrays for Libsodium.
@@ -153,8 +164,16 @@ private class Crypto {
  * Eurotoken and kotlin-ipv8 as well.
  */
 fun main() {
-    val numThreads = 8
+    // The number of times the entire experiment will be repeated.
     val numRepetitions = 100
+    // The maximum number of threads that will be enabled for multi-threading.
+    // All experiments will be performed for 1 thread to numThreads.
+    val numThreads = 8
+    // The number of recipients that will be simulated. Two recipients
+    // mimics the online setting (one from 1st to 2nd recipient and
+    // one from 2nd back to the authority). The authority's initial
+    // signature will be performed regardless of this parameter.
+    val numRecipients = 2
 
     val results = Array(numRepetitions) {
         DoubleArray(numThreads)
@@ -162,8 +181,8 @@ fun main() {
 
     // Warmup round.
     runBlocking {
-//        measureVerify(1000, 100, numThreads)
-        measureSign(1000, 100, numThreads)
+        measureVerify(1000, 100, numThreads, numRecipients)
+//        measureSign(1000, 100, numThreads)
     }
 
     // Loop for every repetition.
@@ -173,8 +192,8 @@ fun main() {
             // Execute each operation in this block sequentially
             // with the runBlocking{} keyword.
             results[i][j - 1] = runBlocking {
-//                measureVerify(1000, 100, j)
-                measureSign(1000, 100, j)
+                measureVerify(1000, 100, j, numRecipients)
+//                measureSign(1000, 100, j)
             }
 
             println("Done with iteration $i $j.")
@@ -187,7 +206,7 @@ fun main() {
         resultString += longArray.joinToString(separator = ",", postfix = "\n")
     }
 
-    File("Achievable Token Signing Throughput - Bouncy Castle.csv").writeText(resultString)
+    File("Achievable Token Signing Throughput.csv").writeText(resultString)
 }
 
 /**
@@ -197,16 +216,18 @@ fun main() {
  * @param numThreads The number of threads on which the batches will be scheduled.
  * @return The number of tokens verified per second.
  */
-private suspend fun measureVerify(tokensPerTask: Int, numTasks: Int, numThreads: Int): Double {
+private suspend fun measureVerify(tokensPerTask: Int, numTasks: Int, numThreads: Int, numRecipients: Int): Double {
     // Create the array of 'tokens'.
     val tokenArray = Array(numTasks) {
 
         // Sign the verifier's payload.
-        val verifierPayload = Random.Default.nextBytes(VERIFIER_PAYLOAD_SIZE)
+        val verifierPayload = Random.Default.nextBytes(AUTHORITY_SIGNATURE_PAYLOAD)
         val verifierSignature = Crypto.sign(verifierPayload)
 
-        // Sign the client's payload.
-        val clientPayload = Random.Default.nextBytes(CLIENT_PAYLOAD_SIZE)
+        // Sign the client's payload. To simulate multiple verifications
+        // (i.e. an offline setting), we will verify this same payload
+        // multiple times.
+        val clientPayload = Random.Default.nextBytes(CLIENT_SIGNATURE_PAYLOAD)
         val clientSignature = Crypto.sign(clientPayload)
 
         Token(verifierPayload, verifierSignature, clientPayload, clientSignature)
@@ -233,9 +254,11 @@ private suspend fun measureVerify(tokensPerTask: Int, numTasks: Int, numThreads:
                         throw Exception("Could not verify verifier signature!")
                     }
 
-                    // Verify client signature.
-                    if (!Crypto.verify(token.clientSignature, token.clientPayload)) {
-                        throw Exception("Could not verify client signature!")
+                    repeat (numRecipients) {
+                        // Verify client signature.
+                        if (!Crypto.verify(token.clientSignature, token.clientPayload)) {
+                            throw Exception("Could not verify client signature!")
+                        }
                     }
                 }
             }
@@ -267,12 +290,8 @@ private suspend fun measureSign(tokensPerTask: Int, numTasks: Int, numThreads: I
                 repeat(tokensPerTask) {
 
                     // Sign the verifier's payload.
-                    val verifierPayload = ByteArray(VERIFIER_PAYLOAD_SIZE)
+                    val verifierPayload = ByteArray(AUTHORITY_SIGNATURE_PAYLOAD)
                     val verifierSignature = Crypto.sign(verifierPayload)
-
-                    // Sign the client's payload.
-                    val clientPayload = ByteArray(CLIENT_PAYLOAD_SIZE)
-                    val clientSignature = Crypto.sign(clientPayload)
                 }
             }
 
