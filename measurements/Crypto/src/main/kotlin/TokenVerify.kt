@@ -105,6 +105,8 @@ private class Crypto {
                 }
 
                 ALGORITHM.BOUNCY_CASTLE -> {
+                    // This code does not multithread.
+
                     bouncySigner.update(payload, 0, payload.size)
                     val signature = bouncySigner.generateSignature()
                     bouncySigner.reset()
@@ -126,6 +128,8 @@ private class Crypto {
                 }
 
                 ALGORITHM.BOUNCY_CASTLE -> {
+                    // This code does not multithread.
+
                     bouncyVerifier.update(payload, 0, payload.size)
                     val ok = bouncyVerifier.verifySignature(signature)
                     bouncySigner.reset()
@@ -149,8 +153,8 @@ private class Crypto {
  * Eurotoken and kotlin-ipv8 as well.
  */
 fun main() {
-    val numThreads = 1
-    val numRepetitions = 10
+    val numThreads = 8
+    val numRepetitions = 100
 
     val results = Array(numRepetitions) {
         DoubleArray(numThreads)
@@ -183,7 +187,7 @@ fun main() {
         resultString += longArray.joinToString(separator = ",", postfix = "\n")
     }
 
-    File("Achievable Token Verification Throughput.csv").writeText(resultString)
+    File("Achievable Token Signing Throughput - Bouncy Castle.csv").writeText(resultString)
 }
 
 /**
