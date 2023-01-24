@@ -57,7 +57,7 @@ private fun bulkVerify(chunkSize: Int): Pair<Double, Double> {
 
 fun main() {
 
-    val numRepetitions = 1
+    val numRepetitions = 100
 
     // Concatenate the result to .csv format.
     var signResultString = "size,throughput\n"

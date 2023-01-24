@@ -1,7 +1,5 @@
 package measurements
 
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import mu.KotlinLogging
 import nl.tudelft.ipv8.IPv8
 import nl.tudelft.ipv8.IPv8Configuration
@@ -15,8 +13,6 @@ import java.net.InetAddress
 
 class StressApplication {
     private val logger = KotlinLogging.logger {}
-    private val dispatcher = Dispatchers.IO
-    private val scope = CoroutineScope(dispatcher)
 
     private val udpEndpoint: UdpEndpoint = UdpEndpoint(8090, InetAddress.getByName("0.0.0.0"))
     private val stressCommunity: StressCommunity
@@ -67,6 +63,10 @@ class StressApplication {
         }
 
         logger.info { "Sent packet(s)" }
+    }
+
+    fun reset() {
+        stressCommunity.reset()
     }
 
     private fun createStressCommunity(): OverlayConfiguration<StressCommunity> {

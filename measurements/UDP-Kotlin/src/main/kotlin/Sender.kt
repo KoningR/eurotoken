@@ -2,7 +2,8 @@ import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
 
-const val RECEIVER_ADDRESS = "192.168.178.220"
+// Change this to your local IP.
+const val RECEIVER_ADDRESS = "localhost"
 const val FROM_PORT = 25595
 const val TO_PORT = 25535
 const val PAYLOAD_SIZE = 1472
