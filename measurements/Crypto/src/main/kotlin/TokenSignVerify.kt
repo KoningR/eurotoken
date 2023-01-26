@@ -168,31 +168,31 @@ fun main() {
     val numRepetitions = 100
     // The maximum number of threads that will be enabled for multi-threading.
     // All experiments will be performed for 1 thread to numThreads.
-    val numThreads = 8
+    val numThreads = 1
     // The number of recipients that will be simulated. Two recipients
     // mimics the online setting (one from 1st to 2nd recipient and
     // one from 2nd back to the authority). The authority's initial
     // signature will be performed regardless of this parameter.
-    val numRecipients = 2
+    val numRecipients = 20
 
     val results = Array(numRepetitions) {
-        DoubleArray(numThreads)
+        DoubleArray(numRecipients)
     }
 
     // Warmup round.
     runBlocking {
-        measureVerify(1000, 100, numThreads, numRecipients)
+        measureVerify(1000, 1, numThreads, numRecipients)
 //        measureSign(1000, 100, numThreads)
     }
 
     // Loop for every repetition.
     for (i in results.indices) {
-        for (j in numThreads downTo 1) {
+        for (j in numRecipients downTo 2) {
 
             // Execute each operation in this block sequentially
             // with the runBlocking{} keyword.
             results[i][j - 1] = runBlocking {
-                measureVerify(1000, 100, j, numRecipients)
+                measureVerify(10000, 1, numThreads, j)
 //                measureSign(1000, 100, j)
             }
 
@@ -206,7 +206,7 @@ fun main() {
         resultString += longArray.joinToString(separator = ",", postfix = "\n")
     }
 
-    File("Achievable Token Signing Throughput.csv").writeText(resultString)
+    File("Achievable Token Offline Throughput.csv").writeText(resultString)
 }
 
 /**
