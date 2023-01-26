@@ -4,7 +4,6 @@ import nl.tudelft.ipv8.IPv4Address
 import nl.tudelft.ipv8.Peer
 import nl.tudelft.ipv8.keyvault.PrivateKey
 import verifier.Verifier
-import java.net.DatagramSocket
 
 open class EuroCommunity : Community() {
     override val serviceId: String
@@ -23,6 +22,14 @@ open class EuroCommunity : Community() {
             IPv4Address("127.0.0.1", 8090),
             IPv4Address("127.0.0.1", 8091)
         )
+    }
+
+    internal fun info() {
+        val sendBufferSize = endpoint.udpEndpoint?.socket?.sendBufferSize
+        val receiveBufferSize = endpoint.udpEndpoint?.socket?.receiveBufferSize
+
+        logger.info { "Number of peers: ${getPeers().size}" }
+        logger.info { "Send buffer: $sendBufferSize Receive buffer: $receiveBufferSize" }
     }
 
     internal fun getFirstPeer(): Peer? {

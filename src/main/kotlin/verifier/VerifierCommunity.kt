@@ -7,28 +7,52 @@ import nl.tudelft.ipv8.Overlay
 import nl.tudelft.ipv8.Peer
 import nl.tudelft.ipv8.keyvault.JavaCryptoProvider
 import nl.tudelft.ipv8.util.toHex
+import java.io.File
+import java.nio.charset.Charset
 
 class VerifierCommunity : EuroCommunity() {
     private val tokens = mutableMapOf<TokenId, Token>()
-
-    internal fun info() {
-        logger.info { getPeers().size }
-    }
-
+    
     internal fun createAndSend(receiver: Peer, amount: Int) {
         val newTokens = mutableSetOf<Token>()
 
+        // Do two separate repeat() loops such that
+        // token minting and sending are separate.
+
+        // Mint new tokens.
         repeat(amount) {
             val token = Token.create(0b1, myPublicKey)
-            signByVerifier(token, token.genesisHash, receiver.publicKey.keyToBin())
-
             tokens[TokenId(token.id)] = token
-
             newTokens.add(token)
         }
 
+        val startTime = System.nanoTime()
+
+        // Sign the tokens.
+        for (token in newTokens) {
+            signByVerifier(token, token.genesisHash, receiver.publicKey.keyToBin())
+        }
+
+        // Send the tokens.
         send(receiver, newTokens)
 
+//        repeat(amount) {
+//            val token = Token.create(0b1, myPublicKey)
+//            signByVerifier(token, token.genesisHash, receiver.publicKey.keyToBin())
+//
+//            tokens[TokenId(token.id)] = token
+//
+//            newTokens.add(token)
+//        }
+
+//        send(receiver, newTokens)
+
+        val endTime = System.nanoTime()
+        val tokensPerSecond = amount / ((endTime - startTime).toDouble() / 1000000000)
+
+        File("TokenAuthoritySign.txt").appendText("$tokensPerSecond,\n", Charset.defaultCharset())
+
+        logger.info { "Throughput of signing and serialization was: $tokensPerSecond" }
         logger.info { "Created $amount new tokens!" }
     }
 

@@ -4,7 +4,10 @@ import EuroCommunity
 import Token
 import nl.tudelft.ipv8.Overlay
 import nl.tudelft.ipv8.Peer
+import nl.tudelft.ipv8.messaging.eva.TransferProgress
 import verifier.Verifier
+import java.io.File
+import java.nio.charset.Charset
 
 class ClientCommunity : EuroCommunity() {
     private val verifierAddress: Peer by lazy { getVerifier()!! }
@@ -13,9 +16,7 @@ class ClientCommunity : EuroCommunity() {
     private val unverifiedTokens: MutableSet<Token> = mutableSetOf()
     private val verifiedTokens: MutableSet<Token> = mutableSetOf()
 
-    internal fun info() {
-        logger.info { getPeers().size }
-    }
+    private var startReceiveTime = -1L
 
     internal fun sendToPeer(receiver: Peer, amount: Int, verified: Boolean, doubleSpend: Boolean = false) {
         val tokens =  if (verified) verifiedTokens else unverifiedTokens
@@ -44,9 +45,32 @@ class ClientCommunity : EuroCommunity() {
         logger.info { "New unverified balance: ${unverifiedTokens.size}" }
     }
 
+    internal fun sendToBank(doubleSpend: Boolean = false) {
+        if (unverifiedTokens.isEmpty()) {
+            logger.info { "There are no unverified tokens!" }
+            return
+        }
+
+        send(verifierAddress, unverifiedTokens)
+
+        if (!doubleSpend) {
+            unverifiedTokens.clear()
+        }
+
+        logger.info { "Sent unverified tokens to a verifier!" }
+    }
+
+    internal fun onEvaProgress(peer: Peer, info: String, progress: TransferProgress) {
+        if (startReceiveTime < 0) {
+            startReceiveTime = System.nanoTime()
+        }
+    }
+
     internal fun onEvaComplete(peer: Peer, info: String, id: String, data: ByteArray?) {
         // TODO: Verify for fun that the received tokens are not already in possession
         //  of this client.
+
+        val endReceiveTime = System.nanoTime()
 
         val receivedTokens = Token.deserialize(data!!)
 
@@ -71,23 +95,22 @@ class ClientCommunity : EuroCommunity() {
             }
         }
 
+        val endVerifyTime = System.nanoTime()
+
+//        val throughput = throughputMbPerSecond(data.size, endReceiveTime - startReceiveTime)
+        val receiveTokensPerSecond = receivedTokens.size / ((endReceiveTime - startReceiveTime).toDouble() / 1000000000)
+        val verifyTokensPerSecond = receivedTokens.size / ((endVerifyTime - endReceiveTime).toDouble() / 1000000000)
+
+        File("TokenClientReceive.txt").appendText("$receiveTokensPerSecond,\n", Charset.defaultCharset())
+        File("TokenClientVerify.txt").appendText("$verifyTokensPerSecond,\n", Charset.defaultCharset())
+
+        startReceiveTime = -1L
+
+//        logger.info { "Throughput in megabytes per second: $throughput" }
+        logger.info { "Tokens received per second: $receiveTokensPerSecond" }
+        logger.info { "Tokens verified per second: $verifyTokensPerSecond" }
         logger.info { "New verified balance: ${verifiedTokens.size}" }
         logger.info { "New unverified balance: ${unverifiedTokens.size}" }
-    }
-
-    internal fun sendToBank(doubleSpend: Boolean = false) {
-        if (unverifiedTokens.isEmpty()) {
-            logger.info { "There are no unverified tokens!" }
-            return
-        }
-
-        send(verifierAddress, unverifiedTokens)
-
-        if (!doubleSpend) {
-            unverifiedTokens.clear()
-        }
-
-        logger.info { "Sent unverified tokens to a verifier!" }
     }
 
     private fun getVerifier(): Peer? {

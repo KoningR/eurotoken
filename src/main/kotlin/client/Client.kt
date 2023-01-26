@@ -38,13 +38,20 @@ suspend fun main() {
             createClientCommunity()
         ), walkerInterval = 1.0)
 
-
         val ipv8 = IPv8(endpointAggregator, config, Peer(JavaCryptoProvider.generateKey()))
         ipv8.start()
 
         clientCommunity = ipv8.getOverlay()!!
         clientCommunity.evaProtocol = EVAProtocol(clientCommunity, scope, retransmitInterval = 150L)
+        clientCommunity.evaProtocol!!.blockSize = 1200
+        clientCommunity.evaProtocol!!.windowSize = 256
+
+        clientCommunity.setOnEVAReceiveProgressCallback(clientCommunity::onEvaProgress)
         clientCommunity.setOnEVAReceiveCompleteCallback(clientCommunity::onEvaComplete)
+
+        clientCommunity.endpoint.udpEndpoint?.socket?.sendBufferSize = 425984
+        clientCommunity.endpoint.udpEndpoint?.socket?.receiveBufferSize = 425984
+
     }
 
     while (true) {
