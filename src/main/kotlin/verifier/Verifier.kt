@@ -35,27 +35,28 @@ suspend fun main() {
         verifierCommunity.evaProtocol!!.blockSize = 1200
         verifierCommunity.evaProtocol!!.windowSize = 256
 
+        verifierCommunity.setOnEVAReceiveProgressCallback(verifierCommunity::onEvaProgress)
         verifierCommunity.setOnEVAReceiveCompleteCallback(verifierCommunity::onEvaComplete)
 
         verifierCommunity.endpoint.udpEndpoint?.socket?.sendBufferSize = 425984
         verifierCommunity.endpoint.udpEndpoint?.socket?.receiveBufferSize = 425984
     }
 
-    repeat(100) {
-        delay(10000)
+    repeat(10) {
+        delay(60000)
         verifierCommunity.createAndSend(verifierCommunity.getFirstPeer()!!, 40000)
     }
 
 
-//    while (true) {
-//        val input = withContext(Dispatchers.IO) {
-//            readLine()!!
-//        }
-//
-//        if (!executeLine(input)) {
-//            break
-//        }
-//    }
+    while (true) {
+        val input = withContext(Dispatchers.IO) {
+            readLine()!!
+        }
+
+        if (!executeLine(input)) {
+            break
+        }
+    }
 }
 
 private fun executeLine(inputString: String): Boolean {

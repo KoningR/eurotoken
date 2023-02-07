@@ -17,6 +17,8 @@ open class EuroCommunity : Community() {
     // EVA requires an ID per transaction.
     private var sendCounter = 0
 
+    internal var startReceiveTime = -1L
+
     override fun getWalkableAddresses(): List<IPv4Address> {
         return listOf(
             IPv4Address("127.0.0.1", 8090),

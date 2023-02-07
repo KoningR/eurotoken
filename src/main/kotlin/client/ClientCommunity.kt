@@ -8,6 +8,7 @@ import nl.tudelft.ipv8.messaging.eva.TransferProgress
 import verifier.Verifier
 import java.io.File
 import java.nio.charset.Charset
+import java.util.*
 
 class ClientCommunity : EuroCommunity() {
     private val verifierAddress: Peer by lazy { getVerifier()!! }
@@ -16,7 +17,7 @@ class ClientCommunity : EuroCommunity() {
     private val unverifiedTokens: MutableSet<Token> = mutableSetOf()
     private val verifiedTokens: MutableSet<Token> = mutableSetOf()
 
-    private var startReceiveTime = -1L
+    private val debugId = UUID.randomUUID().toString()
 
     internal fun sendToPeer(receiver: Peer, amount: Int, verified: Boolean, doubleSpend: Boolean = false) {
         val tokens =  if (verified) verifiedTokens else unverifiedTokens
@@ -63,6 +64,7 @@ class ClientCommunity : EuroCommunity() {
     internal fun onEvaProgress(peer: Peer, info: String, progress: TransferProgress) {
         if (startReceiveTime < 0) {
             startReceiveTime = System.nanoTime()
+            logger.info { "Starting EVA transaction..." }
         }
     }
 
@@ -101,16 +103,23 @@ class ClientCommunity : EuroCommunity() {
         val receiveTokensPerSecond = receivedTokens.size / ((endReceiveTime - startReceiveTime).toDouble() / 1000000000)
         val verifyTokensPerSecond = receivedTokens.size / ((endVerifyTime - endReceiveTime).toDouble() / 1000000000)
 
-        File("TokenClientReceive.txt").appendText("$receiveTokensPerSecond,\n", Charset.defaultCharset())
-        File("TokenClientVerify.txt").appendText("$verifyTokensPerSecond,\n", Charset.defaultCharset())
-
         startReceiveTime = -1L
 
 //        logger.info { "Throughput in megabytes per second: $throughput" }
+        logger.info {"Random ID is: $debugId"}
         logger.info { "Tokens received per second: $receiveTokensPerSecond" }
         logger.info { "Tokens verified per second: $verifyTokensPerSecond" }
         logger.info { "New verified balance: ${verifiedTokens.size}" }
         logger.info { "New unverified balance: ${unverifiedTokens.size}" }
+
+        File("$debugId - TokenClientReceive.txt").appendText("$receiveTokensPerSecond,\n", Charset.defaultCharset())
+        File("$debugId - TokenClientVerify.txt").appendText("$verifyTokensPerSecond,\n", Charset.defaultCharset())
+
+        if (verifiedTokens.size == 40000) {
+            sendToPeer(getFirstPeer()!!,40000, verified = true, doubleSpend = false)
+        } else if (unverifiedTokens.size == 40000) {
+            sendToBank()
+        }
     }
 
     private fun getVerifier(): Peer? {

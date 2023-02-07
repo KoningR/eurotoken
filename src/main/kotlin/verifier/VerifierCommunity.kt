@@ -6,6 +6,7 @@ import Token
 import nl.tudelft.ipv8.Overlay
 import nl.tudelft.ipv8.Peer
 import nl.tudelft.ipv8.keyvault.JavaCryptoProvider
+import nl.tudelft.ipv8.messaging.eva.TransferProgress
 import nl.tudelft.ipv8.util.toHex
 import java.io.File
 import java.nio.charset.Charset
@@ -55,6 +56,12 @@ class VerifierCommunity : EuroCommunity() {
         logger.info { "Throughput of signing and serialization was: $tokensPerSecond" }
         logger.info { "Created $amount new tokens!" }
     }
+    internal fun onEvaProgress(peer: Peer, info: String, progress: TransferProgress) {
+        if (startReceiveTime < 0) {
+            startReceiveTime = System.nanoTime()
+            logger.info { "Starting EVA transaction..." }
+        }
+    }
 
     internal fun onEvaComplete(peer: Peer, info: String, id: String, data: ByteArray?) {
 
@@ -76,6 +83,8 @@ class VerifierCommunity : EuroCommunity() {
         //  clients currently still accept tokens they have already received.
         //  Upon validating these tokens, they are rejected, the victim is blamed for
         //  the replay attack and the original attacked cannot be detected.
+
+        val endReceiveTime = System.nanoTime()
 
         val receivedTokens = Token.deserialize(data!!)
         val verifiedTokens = mutableSetOf<Token>()
@@ -125,7 +134,17 @@ class VerifierCommunity : EuroCommunity() {
             verifiedTokens.add(receivedToken)
         }
 
+        val endVerifyTime = System.nanoTime()
+
+        val receiveTokensPerSecond = receivedTokens.size / ((endReceiveTime - startReceiveTime).toDouble() / 1000000000)
+        val verifyTokensPerSecond = receivedTokens.size / ((endVerifyTime - endReceiveTime).toDouble() / 1000000000)
+
+        startReceiveTime = -1L
+
         logger.info { "Received ${verifiedTokens.size} valid tokens and verified them!" }
+
+        File("TokenAuthorityReceive.txt").appendText("$receiveTokensPerSecond,\n", Charset.defaultCharset())
+        File("TokenAuthorityVerify.txt").appendText("$verifyTokensPerSecond,\n", Charset.defaultCharset())
 
         send(peer, verifiedTokens)
     }
