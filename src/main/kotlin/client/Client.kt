@@ -18,18 +18,6 @@ private val scope = CoroutineScope(dispatcher)
 private lateinit var clientCommunity: ClientCommunity
 
 suspend fun main() {
-    // TODO
-    //  Implement offline mode.
-    //  Implement a persistence mechanism.
-    //  Implement threading and coroutines.
-    //  Implement an acknowledgement system.
-    //  Create separate databases for unacknowledged tokens.
-    //  Perform optimisations:
-    //      Use another walking mechanism / peer discovery.
-    //      Change the crypto API to one that supports indexing.
-    //      Initialise packets statically.
-    //      Replace calls of toSocketAddress().
-
     withContext(dispatcher) {
         val udpEndpoint=  UdpEndpoint(8090, InetAddress.getByName("0.0.0.0"))
 

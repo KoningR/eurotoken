@@ -107,7 +107,6 @@ class Token(
         private val logger = KotlinLogging.logger {}
         private val secureRandom = SecureRandom()
 
-        // TODO: Write a unit test to verify that these values are still correct.
         private const val ID_SIZE = 8
         private const val VALUE_SIZE = 1
         private const val PUBLIC_KEY_SIZE = 74
@@ -246,7 +245,6 @@ class Token(
 
         // https://stackoverflow.com/questions/67179257/how-can-i-convert-an-int-to-a-bytearray-and-then-convert-it-back-to-an-int-with
         private fun copyShortIntoByteArray(short: Short, byteArray: ByteArray, index: Int) {
-
             byteArray[index] = (short.toInt() shr 8).toByte()
             byteArray[index + 1] = (short.toInt()).toByte()
         }

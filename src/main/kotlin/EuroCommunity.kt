@@ -57,4 +57,8 @@ open class EuroCommunity : Community() {
 
         evaSendBinary(receiver, serviceId, sendCounter++.toString(), data)
     }
+
+    companion object {
+        internal const val DEBUG = false
+    }
 }

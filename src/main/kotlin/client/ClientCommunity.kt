@@ -52,6 +52,10 @@ class ClientCommunity : EuroCommunity() {
             return
         }
 
+        for (token in unverifiedTokens) {
+            token.signByPeer(verifierKey, myPrivateKey)
+        }
+
         send(verifierAddress, unverifiedTokens)
 
         if (!doubleSpend) {
@@ -69,9 +73,6 @@ class ClientCommunity : EuroCommunity() {
     }
 
     internal fun onEvaComplete(peer: Peer, info: String, id: String, data: ByteArray?) {
-        // TODO: Verify for fun that the received tokens are not already in possession
-        //  of this client.
-
         val endReceiveTime = System.nanoTime()
 
         val receivedTokens = Token.deserialize(data!!)
@@ -87,7 +88,7 @@ class ClientCommunity : EuroCommunity() {
                 continue
             }
 
-            // If the token is completely verified and it has 1 recipient, namely this object,
+            // If the token is completely verified, and it has 1 recipient, namely this object,
             // then it must have been sent directly from a verifier and is therefore a verified
             // token.
             if (token.numRecipients == 1) {
@@ -99,26 +100,27 @@ class ClientCommunity : EuroCommunity() {
 
         val endVerifyTime = System.nanoTime()
 
-//        val throughput = throughputMbPerSecond(data.size, endReceiveTime - startReceiveTime)
         val receiveTokensPerSecond = receivedTokens.size / ((endReceiveTime - startReceiveTime).toDouble() / 1000000000)
         val verifyTokensPerSecond = receivedTokens.size / ((endVerifyTime - endReceiveTime).toDouble() / 1000000000)
 
         startReceiveTime = -1L
 
-//        logger.info { "Throughput in megabytes per second: $throughput" }
-        logger.info {"Random ID is: $debugId"}
-        logger.info { "Tokens received per second: $receiveTokensPerSecond" }
-        logger.info { "Tokens verified per second: $verifyTokensPerSecond" }
         logger.info { "New verified balance: ${verifiedTokens.size}" }
         logger.info { "New unverified balance: ${unverifiedTokens.size}" }
 
-        File("$debugId - TokenClientReceive.txt").appendText("$receiveTokensPerSecond,\n", Charset.defaultCharset())
-        File("$debugId - TokenClientVerify.txt").appendText("$verifyTokensPerSecond,\n", Charset.defaultCharset())
+        if (DEBUG) {
+            logger.info {"Random ID is: $debugId"}
+            logger.info { "Tokens received per second: $receiveTokensPerSecond" }
+            logger.info { "Tokens verified per second: $verifyTokensPerSecond" }
 
-        if (verifiedTokens.size == 40000) {
-            sendToPeer(getFirstPeer()!!,40000, verified = true, doubleSpend = false)
-        } else if (unverifiedTokens.size == 40000) {
-            sendToBank()
+            File("$debugId - TokenClientReceive.txt").appendText("$receiveTokensPerSecond,\n", Charset.defaultCharset())
+            File("$debugId - TokenClientVerify.txt").appendText("$verifyTokensPerSecond,\n", Charset.defaultCharset())
+
+            if (verifiedTokens.size == 40000) {
+                sendToPeer(getFirstPeer()!!,40000, verified = true, doubleSpend = false)
+            } else if (unverifiedTokens.size == 40000) {
+                sendToBank()
+            }
         }
     }
 

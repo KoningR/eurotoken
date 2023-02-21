@@ -1,5 +1,6 @@
 package verifier
 
+import EuroCommunity
 import kotlinx.coroutines.*
 import nl.tudelft.ipv8.IPv8
 import nl.tudelft.ipv8.IPv8Configuration
@@ -42,11 +43,12 @@ suspend fun main() {
         verifierCommunity.endpoint.udpEndpoint?.socket?.receiveBufferSize = 425984
     }
 
-    repeat(10) {
-        delay(60000)
-        verifierCommunity.createAndSend(verifierCommunity.getFirstPeer()!!, 40000)
+    if (EuroCommunity.DEBUG) {
+        repeat(10) {
+            delay(60000)
+            verifierCommunity.createAndSend(verifierCommunity.getFirstPeer()!!, 40000)
+        }
     }
-
 
     while (true) {
         val input = withContext(Dispatchers.IO) {

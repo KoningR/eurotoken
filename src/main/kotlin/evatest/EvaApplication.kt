@@ -27,7 +27,6 @@ class EvaApplication {
     init {
         val myPrivateKey = JavaCryptoProvider.generateKey()
         val myPeer = Peer(myPrivateKey)
-//        val myPublicKey = myPeer.publicKey.keyToBin()
 
         val endpointAggregator = EndpointAggregator(udpEndpoint, null)
         val config = IPv8Configuration(overlays = listOf(
@@ -43,8 +42,6 @@ class EvaApplication {
         evaCommunity.setOnEVAReceiveCompleteCallback(::onEvaComplete)
         evaCommunity.setOnEVAErrorCallback(::onEvaError)
 
-//        evaCommunity.endpoint.udpEndpoint?.socket?.sendBufferSize = 1
-//        evaCommunity.endpoint.udpEndpoint?.socket?.receiveBufferSize = 1
         logger.info { "Send buffer: ${evaCommunity.endpoint.udpEndpoint?.socket?.sendBufferSize}" }
         logger.info { "Receive buffer: ${evaCommunity.endpoint.udpEndpoint?.socket?.receiveBufferSize}" }
     }

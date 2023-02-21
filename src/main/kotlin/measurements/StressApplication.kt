@@ -20,7 +20,6 @@ class StressApplication {
     init {
         val myPrivateKey = JavaCryptoProvider.generateKey()
         val myPeer = Peer(myPrivateKey)
-//        val myPublicKey = myPeer.publicKey.keyToBin()
 
         val endpointAggregator = EndpointAggregator(udpEndpoint, null)
         val config = IPv8Configuration(overlays = listOf(
