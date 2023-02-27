@@ -47,6 +47,11 @@ class StressCommunity : Community() {
         }
     }
 
+    internal fun reset() {
+        startTime = -1L
+        received = 0
+    }
+
     private fun throughputMbPerSecond(bytes: Int, nanos: Long): Double {
         return (bytes.toDouble() / 1000000) / (nanos.toDouble() / 1000000000)
     }

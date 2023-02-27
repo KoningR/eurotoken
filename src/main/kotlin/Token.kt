@@ -2,10 +2,8 @@ import mu.KotlinLogging
 import nl.tudelft.ipv8.keyvault.JavaCryptoProvider
 import nl.tudelft.ipv8.keyvault.PrivateKey
 import java.security.SecureRandom
-import kotlin.random.Random
 
 data class RecipientPair(val publicKey: ByteArray, val proof: ByteArray) {
-    private val name = hashCode().toString()
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -109,7 +107,6 @@ class Token(
         private val logger = KotlinLogging.logger {}
         private val secureRandom = SecureRandom()
 
-        // TODO: Write a unit test to verify that these values are still correct.
         private const val ID_SIZE = 8
         private const val VALUE_SIZE = 1
         private const val PUBLIC_KEY_SIZE = 74
@@ -177,6 +174,13 @@ class Token(
             return data
         }
 
+        /**
+         * Deserialize a byte array into a set of tokens. When the array
+         * is not formatted correctly, this method will simply print a log.
+         * Note that each token takes up 287 bytes instead of 285. The
+         * additional 2 bytes are reserved for a short to denote the
+         * number of recipients.
+         */
         internal fun deserialize(data: ByteArray): MutableSet<Token> {
             if (data.isEmpty()) {
                 logger.info { "Received an empty token set!" }
@@ -241,7 +245,6 @@ class Token(
 
         // https://stackoverflow.com/questions/67179257/how-can-i-convert-an-int-to-a-bytearray-and-then-convert-it-back-to-an-int-with
         private fun copyShortIntoByteArray(short: Short, byteArray: ByteArray, index: Int) {
-
             byteArray[index] = (short.toInt() shr 8).toByte()
             byteArray[index + 1] = (short.toInt()).toByte()
         }

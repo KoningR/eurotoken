@@ -36,9 +36,9 @@ class EvaCommunity : Community() {
 
         val startTime = transactionTimer[id]!!
 
-        File("EVA Window Block Gridsearch Yes Encryption.csv")
+        File("EVA Window Block Gridsearch No Encryption.csv")
             .appendText("${throughputMbPerSecond(totalBytes, now - startTime)},")
-        File("EVA Window Block Gridsearch Packets Lost.csv")
+        File("EVA Window Block Gridsearch Packets Lost No Encryption.csv")
             .appendText("$numLostPackets,")
 
         logger.info { "Megabytes per second: ${throughputMbPerSecond(totalBytes, now - startTime)}" }

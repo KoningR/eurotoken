@@ -13,6 +13,9 @@ private fun executeLine(inputString: String, app: StressApplication, logger: KLo
         "test" -> {
             app.test()
         }
+        "reset" -> {
+            app.reset()
+        }
     }
 
     return true

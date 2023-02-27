@@ -6,59 +6,70 @@ import Token
 import nl.tudelft.ipv8.Overlay
 import nl.tudelft.ipv8.Peer
 import nl.tudelft.ipv8.keyvault.JavaCryptoProvider
+import nl.tudelft.ipv8.messaging.eva.TransferProgress
 import nl.tudelft.ipv8.util.toHex
+import java.io.File
+import java.nio.charset.Charset
 
 class VerifierCommunity : EuroCommunity() {
     private val tokens = mutableMapOf<TokenId, Token>()
-
-    internal fun info() {
-        logger.info { getPeers().size }
-    }
-
+    
     internal fun createAndSend(receiver: Peer, amount: Int) {
         val newTokens = mutableSetOf<Token>()
 
+        // Mint new tokens.
         repeat(amount) {
             val token = Token.create(0b1, myPublicKey)
-            signByVerifier(token, token.genesisHash, receiver.publicKey.keyToBin())
-
             tokens[TokenId(token.id)] = token
-
             newTokens.add(token)
         }
 
+        val startTime = System.nanoTime()
+
+        // Sign the tokens.
+        for (token in newTokens) {
+            signByVerifier(token, token.genesisHash, receiver.publicKey.keyToBin())
+        }
+
+        // Send the tokens.
         send(receiver, newTokens)
 
+        val endTime = System.nanoTime()
+
         logger.info { "Created $amount new tokens!" }
+
+        if (DEBUG) {
+            val tokensPerSecond = amount / ((endTime - startTime).toDouble() / 1000000000)
+            File("TokenAuthoritySign.txt").appendText("$tokensPerSecond,\n", Charset.defaultCharset())
+
+            logger.info { "Throughput of signing and serialization was: $tokensPerSecond" }
+        }
+    }
+
+    internal fun onEvaProgress(peer: Peer, info: String, progress: TransferProgress) {
+        if (startReceiveTime < 0) {
+            startReceiveTime = System.nanoTime()
+            logger.info { "Starting EVA transaction..." }
+        }
     }
 
     internal fun onEvaComplete(peer: Peer, info: String, id: String, data: ByteArray?) {
-
-        // TODO: Encrypt the entire history with the verifier's public key
-        //  such that individuals cannot see it and privacy is maintained better?
-        //  Also this removes the need to chain hashes because simple integer counters
-        //  can then be used.
-
-        // TODO: What if person keeps paying with the unverified version of a token
-        //  after having it verified?
-
-        // TODO: Add a mechanism to ensure parties really try to verify tokens for themselves.
-        //  Currently it is possible to cut a token in half and redeem/verify money for someone else.
-        //  This makes it so people can flag others as double spenders.
-
-        // TODO: How to deal with sequential double spends?
-
-        // TODO: Although replay attacks will be detected by the verifier, individual
-        //  clients currently still accept tokens they have already received.
-        //  Upon validating these tokens, they are rejected, the victim is blamed for
-        //  the replay attack and the original attacked cannot be detected.
+        val endReceiveTime = System.nanoTime()
 
         val receivedTokens = Token.deserialize(data!!)
         val verifiedTokens = mutableSetOf<Token>()
 
         for (receivedToken in receivedTokens) {
-            if (receivedToken.numRecipients == 1) {
+            // A token needs at least 3 recipients before it makes
+            // sense to verify; the initial recipient, the second
+            // one, and then back to the authority.
+            if (receivedToken.numRecipients < 3) {
                 logger.info { "Token is already verified!" }
+                continue
+            }
+
+            if (!(myPublicKey contentEquals receivedToken.lastRecipient)) {
+                logger.info { "Token was not intended for this authority!" }
                 continue
             }
 
@@ -82,6 +93,10 @@ class VerifierCommunity : EuroCommunity() {
                 continue
             }
 
+            // Drop the last recipient, because it is the authority
+            // itself.
+            receivedToken.recipients.removeLast()
+
             val lastVerifiedProof = verifiedToken.lastProof
 
             if (!(lastVerifiedProof contentEquals receivedToken.firstProof)) {
@@ -101,9 +116,21 @@ class VerifierCommunity : EuroCommunity() {
             verifiedTokens.add(receivedToken)
         }
 
+        val endVerifyTime = System.nanoTime()
+
         logger.info { "Received ${verifiedTokens.size} valid tokens and verified them!" }
 
-        send(peer, verifiedTokens)
+        if (DEBUG) {
+            val receiveTokensPerSecond = receivedTokens.size / ((endReceiveTime - startReceiveTime).toDouble() / 1000000000)
+            val verifyTokensPerSecond = receivedTokens.size / ((endVerifyTime - endReceiveTime).toDouble() / 1000000000)
+
+            startReceiveTime = -1L
+
+            File("TokenAuthorityReceive.txt").appendText("$receiveTokensPerSecond,\n", Charset.defaultCharset())
+            File("TokenAuthorityVerify.txt").appendText("$verifyTokensPerSecond,\n", Charset.defaultCharset())
+        } else {
+            send(peer, verifiedTokens)
+        }
     }
 
     private fun findDoubleSpend(receivedToken: Token, verifiedToken: Token) {

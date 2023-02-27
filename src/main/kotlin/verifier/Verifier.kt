@@ -1,5 +1,6 @@
 package verifier
 
+import EuroCommunity
 import kotlinx.coroutines.*
 import nl.tudelft.ipv8.IPv8
 import nl.tudelft.ipv8.IPv8Configuration
@@ -32,7 +33,21 @@ suspend fun main() {
 
         verifierCommunity = ipv8.getOverlay()!!
         verifierCommunity.evaProtocol = EVAProtocol(verifierCommunity, scope, retransmitInterval = 150L)
+        verifierCommunity.evaProtocol!!.blockSize = 1200
+        verifierCommunity.evaProtocol!!.windowSize = 256
+
+        verifierCommunity.setOnEVAReceiveProgressCallback(verifierCommunity::onEvaProgress)
         verifierCommunity.setOnEVAReceiveCompleteCallback(verifierCommunity::onEvaComplete)
+
+        verifierCommunity.endpoint.udpEndpoint?.socket?.sendBufferSize = 425984
+        verifierCommunity.endpoint.udpEndpoint?.socket?.receiveBufferSize = 425984
+    }
+
+    if (EuroCommunity.DEBUG) {
+        repeat(10) {
+            delay(60000)
+            verifierCommunity.createAndSend(verifierCommunity.getFirstPeer()!!, 40000)
+        }
     }
 
     while (true) {

@@ -3,8 +3,6 @@ buildscript {
     ext.ktlint_version = '0.36.0'
     ext.coroutines_version = '1.4.2'
     ext.ktlint_gradle_version = '9.1.1'
-    // https://github.com/cashapp/sqldelight/issues/1574
-    // TODO: From 1.4.0 onwards, SQLDelight supports chaining transactions.
     ext.sqldelight_version = '1.2.1'
     ext.nav_version = "2.2.1"
     ext.fragment_version = "1.2.2"
@@ -35,7 +33,6 @@ plugins {
     id 'java'
 }
 
-// TODO: Deprecated syntax.
 apply plugin: 'com.squareup.sqldelight'
 
 allprojects {

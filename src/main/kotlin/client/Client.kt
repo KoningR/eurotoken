@@ -18,18 +18,6 @@ private val scope = CoroutineScope(dispatcher)
 private lateinit var clientCommunity: ClientCommunity
 
 suspend fun main() {
-    // TODO
-    //  Implement offline mode.
-    //  Implement a persistence mechanism.
-    //  Implement threading and coroutines.
-    //  Implement an acknowledgement system.
-    //  Create separate databases for unacknowledged tokens.
-    //  Perform optimisations:
-    //      Use another walking mechanism / peer discovery.
-    //      Change the crypto API to one that supports indexing.
-    //      Initialise packets statically.
-    //      Replace calls of toSocketAddress().
-
     withContext(dispatcher) {
         val udpEndpoint=  UdpEndpoint(8090, InetAddress.getByName("0.0.0.0"))
 
@@ -38,13 +26,20 @@ suspend fun main() {
             createClientCommunity()
         ), walkerInterval = 1.0)
 
-
         val ipv8 = IPv8(endpointAggregator, config, Peer(JavaCryptoProvider.generateKey()))
         ipv8.start()
 
         clientCommunity = ipv8.getOverlay()!!
         clientCommunity.evaProtocol = EVAProtocol(clientCommunity, scope, retransmitInterval = 150L)
+        clientCommunity.evaProtocol!!.blockSize = 1200
+        clientCommunity.evaProtocol!!.windowSize = 256
+
+        clientCommunity.setOnEVAReceiveProgressCallback(clientCommunity::onEvaProgress)
         clientCommunity.setOnEVAReceiveCompleteCallback(clientCommunity::onEvaComplete)
+
+        clientCommunity.endpoint.udpEndpoint?.socket?.sendBufferSize = 425984
+        clientCommunity.endpoint.udpEndpoint?.socket?.receiveBufferSize = 425984
+
     }
 
     while (true) {
