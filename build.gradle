@@ -1,12 +1,13 @@
 buildscript {
-    ext.kotlin_version = '1.4.21'
-    ext.ktlint_version = '0.36.0'
-    ext.coroutines_version = '1.4.2'
-    ext.ktlint_gradle_version = '9.1.1'
-    ext.sqldelight_version = '1.2.1'
-    ext.nav_version = "2.2.1"
-    ext.fragment_version = "1.2.2"
-    ext.lifecycle_version = "2.2.0"
+    ext.kotlin_version = '1.7.10'
+    ext.ktlint_version = '0.44.0'
+    ext.coroutines_version = '1.6.4'
+    ext.ktlint_gradle_version = '11.0.0'
+    // https://github.com/cashapp/sqldelight/issues/1574
+    ext.sqldelight_version = '1.5.2'
+    ext.nav_version = "2.5.3"
+    ext.fragment_version = "1.5.4"
+    ext.lifecycle_version = "2.5.1"
     ext.dokka_version = "0.10.1"
     repositories {
         google()
@@ -15,7 +16,7 @@ buildscript {
         maven { url 'https://jitpack.io' }
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:4.0.0'
+        classpath 'com.android.tools.build:gradle:7.3.1'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
         classpath "org.jlleitschuh.gradle:ktlint-gradle:$ktlint_gradle_version"
         classpath "com.squareup.sqldelight:gradle-plugin:$sqldelight_version"
@@ -64,14 +65,18 @@ dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutines_version"
     implementation "org.jetbrains.kotlin:kotlin-reflect:$kotlin_version"
-    implementation 'org.slf4j:slf4j-simple:1.7.29'
 
     // Logging
     implementation 'io.github.microutils:kotlin-logging:1.7.7'
 
-    implementation "com.squareup.sqldelight:sqlite-driver:$sqldelight_version"
-
     testImplementation 'org.jetbrains.kotlin:kotlin-test:1.5.31'
+}
+
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).all {
+    kotlinOptions.freeCompilerArgs += [
+            "-opt-in=kotlin.Experimental,kotlin.ExperimentalUnsignedTypes",
+            "-opt-in=kotlin.RequiresOptIn"
+    ]
 }
 
 test {
